@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createClient } from '@supabase/supabase-js';
 import {
@@ -144,100 +144,130 @@ function useStore(user) {
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
   const userId = user?.id;
-  const loadLocal = () => {
+
+  const loadLocal = useCallback(() => {
     const db = readLocal();
     setMenu(db.menu.filter((x) => x.user_id === userId).sort((a, b) => a.name.localeCompare(b.name)));
     setOrders(db.orders.filter((x) => x.user_id === userId).sort((a, b) => b.timestamp - a.timestamp));
     setExpenses(db.expenses.filter((x) => x.user_id === userId).sort((a, b) => b.timestamp - a.timestamp));
     setLoading(false);
-  };
+  }, [userId]);
+
+  const loadCloud = useCallback(async () => {
+    if (!supabase || !userId) return;
+    const [m, o, e] = await Promise.all([
+      supabase.from('menu_items').select('*').order('name'),
+      supabase.from('orders').select('*').order('timestamp', { ascending: false }),
+      supabase.from('expenses').select('*').order('timestamp', { ascending: false }),
+    ]);
+    if (m.error) throw m.error;
+    if (o.error) throw o.error;
+    if (e.error) throw e.error;
+    setMenu(m.data || []);
+    setOrders(o.data || []);
+    setExpenses(e.data || []);
+    setLoading(false);
+  }, [userId]);
+
+  const refresh = useCallback(async () => {
+    if (supabase) await loadCloud();
+    else loadLocal();
+  }, [loadCloud, loadLocal]);
+
   useEffect(() => {
     if (!userId) return;
     setLoading(true);
+    refresh().catch(() => setLoading(false));
+
     if (supabase) {
-      Promise.all([
-        supabase.from('menu_items').select('*').order('name'),
-        supabase.from('orders').select('*').order('timestamp', { ascending: false }),
-        supabase.from('expenses').select('*').order('timestamp', { ascending: false }),
-      ])
-        .then(([m, o, e]) => {
-          if (m.error) throw m.error;
-          if (o.error) throw o.error;
-          if (e.error) throw e.error;
-          setMenu(m.data || []);
-          setOrders(o.data || []);
-          setExpenses(e.data || []);
-          setLoading(false);
-        })
-        .catch(() => setLoading(false));
-    } else loadLocal();
-    const on = () => !supabase && loadLocal();
+      const channel = supabase
+        .channel(`warkop-live-${userId}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, () => refresh())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => refresh())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, () => refresh())
+        .subscribe();
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+
+    const on = () => loadLocal();
     window.addEventListener('warkop-local-change', on);
     return () => window.removeEventListener('warkop-local-change', on);
-  }, [userId]);
+  }, [userId, refresh, loadLocal]);
+
   const addMenu = async (item) => {
     if (supabase) {
-      const { error } = await supabase.from('menu_items').insert(item);
+      const { data, error } = await supabase.from('menu_items').insert(item).select('*').single();
       if (error) throw error;
+      if (data) setMenu((prev) => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
     } else {
       const db = readLocal();
       db.menu.push({ id: uid(), user_id: userId, ...item, created_at: now() });
       writeLocal(db);
     }
   };
+
   const updateMenu = async (id, item) => {
     if (supabase) {
-      const { error } = await supabase.from('menu_items').update(item).eq('id', id);
+      const { data, error } = await supabase.from('menu_items').update(item).eq('id', id).select('*').single();
       if (error) throw error;
+      if (data) setMenu((prev) => prev.map((x) => (x.id === id ? data : x)).sort((a, b) => a.name.localeCompare(b.name)));
     } else {
       const db = readLocal();
       db.menu = db.menu.map((x) => (x.id === id && x.user_id === userId ? { ...x, ...item } : x));
       writeLocal(db);
     }
   };
+
   const deleteMenu = async (id) => {
     if (supabase) {
       const { error } = await supabase.from('menu_items').delete().eq('id', id);
       if (error) throw error;
+      setMenu((prev) => prev.filter((x) => x.id !== id));
     } else {
       const db = readLocal();
       db.menu = db.menu.filter((x) => !(x.id === id && x.user_id === userId));
       writeLocal(db);
     }
   };
+
   const addOrder = async (order) => {
     if (supabase) {
-      const { error } = await supabase.from('orders').insert(order);
+      const { data, error } = await supabase.from('orders').insert(order).select('*').single();
       if (error) throw error;
+      if (data) setOrders((prev) => [data, ...prev].sort((a, b) => b.timestamp - a.timestamp));
     } else {
       const db = readLocal();
       db.orders.push({ id: uid(), user_id: userId, ...order });
       writeLocal(db);
     }
   };
+
   const addExpense = async (exp) => {
     if (supabase) {
-      const { error } = await supabase.from('expenses').insert(exp);
+      const { data, error } = await supabase.from('expenses').insert(exp).select('*').single();
       if (error) throw error;
+      if (data) setExpenses((prev) => [data, ...prev].sort((a, b) => b.timestamp - a.timestamp));
     } else {
       const db = readLocal();
       db.expenses.push({ id: uid(), user_id: userId, ...exp });
       writeLocal(db);
     }
   };
+
   const deleteExpense = async (id) => {
     if (supabase) {
       const { error } = await supabase.from('expenses').delete().eq('id', id);
       if (error) throw error;
+      setExpenses((prev) => prev.filter((x) => x.id !== id));
     } else {
       const db = readLocal();
       db.expenses = db.expenses.filter((x) => !(x.id === id && x.user_id === userId));
       writeLocal(db);
     }
   };
-  const refresh = () => {
-    if (!supabase) loadLocal();
-  };
+
   return { menu, orders, expenses, loading, addMenu, updateMenu, deleteMenu, addOrder, addExpense, deleteExpense, refresh };
 }
 
