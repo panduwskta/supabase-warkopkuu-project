@@ -36,6 +36,25 @@ const formatRp = (amount) =>
 const formatDate = (timestamp) =>
   new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(timestamp));
 const todayStart = () => new Date().setHours(0, 0, 0, 0);
+const weekStart = () => { const d = new Date(); const day = d.getDay() || 7; d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - day + 1); return d.getTime(); };
+const monthStart = () => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).getTime(); };
+const receiptNo = (order) => order.items?.[0]?._receipt_no || `WKK-${String(order.id || order.timestamp).slice(0, 8).toUpperCase()}`;
+const paidAmount = (order) => Number(order.items?.[0]?._paid_amount || 0);
+const changeAmount = (order) => Number(order.items?.[0]?._change_amount || 0);
+const receiptText = (order) => {
+  const lines = [
+    'Struk WarkopKuu',
+    `No: ${receiptNo(order)}`,
+    `Waktu: ${formatDate(order.timestamp)}`,
+    '',
+    ...order.items.map((i) => `${i.qty}x ${i.name} — ${formatRp(i.price * i.qty)}`),
+    '',
+    `Total: ${formatRp(order.total)}`,
+  ];
+  if (paidAmount(order)) lines.push(`Dibayar: ${formatRp(paidAmount(order))}`, `Kembalian: ${formatRp(changeAmount(order))}`);
+  lines.push('', 'Terima kasih 🙏');
+  return lines.join('\n');
+};
 const safeJson = (v, fallback) => {
   try {
     return JSON.parse(v) ?? fallback;
@@ -327,6 +346,7 @@ function App() {
   const [newMenu, setNewMenu] = useState({ name: '', price: '', category: 'Minuman', stock: '' });
   const [edit, setEdit] = useState(null);
   const [expense, setExpense] = useState({ name: '', amount: '', category: 'Belanja Bahan' });
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
   const show = (message, type = 'success') => { setToast({ message, type }); setTimeout(() => setToast(null), 2500); };
 
   if (auth.loading) return <Splash />;
@@ -355,8 +375,7 @@ function App() {
     return { ...item, qty: nextQty };
   }));
   const cartTotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
-  const checkout = async () => {
-    if (!cart.length) return;
+  const validateStock = () => {
     const stockIssue = cart.find((cartItem) => {
       const latest = store.menu.find((menuItem) => menuItem.id === cartItem.id);
       return latest?.stock != null && cartItem.qty > Number(latest.stock);
@@ -364,10 +383,33 @@ function App() {
     if (stockIssue) {
       const latest = store.menu.find((menuItem) => menuItem.id === stockIssue.id);
       show(`Stok ${stockIssue.name} tidak cukup. Sisa ${latest?.stock ?? 0}`, 'error');
+      return false;
+    }
+    return true;
+  };
+  const checkout = () => {
+    if (!cart.length) return;
+    if (!validateStock()) return;
+    setCheckoutOpen(true);
+  };
+  const processCheckout = async (paid) => {
+    if (!cart.length) return;
+    if (!validateStock()) return;
+    const paidNumber = Number(paid || 0);
+    if (paidNumber < cartTotal) {
+      show('Uang diterima kurang dari total belanja', 'error');
       return;
     }
+    const createdAt = now();
+    const no = `WKK-${createdAt.toString(36).toUpperCase()}`;
+    const itemsWithMeta = cart.map((item) => ({
+      ...item,
+      _receipt_no: no,
+      _paid_amount: paidNumber,
+      _change_amount: paidNumber - cartTotal,
+    }));
     try {
-      await store.addOrder({ items: cart, total: cartTotal, timestamp: now() });
+      await store.addOrder({ items: itemsWithMeta, total: cartTotal, timestamp: createdAt });
       await Promise.all(cart.map((cartItem) => {
         const latest = store.menu.find((menuItem) => menuItem.id === cartItem.id);
         if (latest?.stock == null) return Promise.resolve();
@@ -375,6 +417,7 @@ function App() {
         return store.updateMenu(cartItem.id, { stock: nextStock });
       }));
       setCart([]);
+      setCheckoutOpen(false);
       await store.refresh();
       show('Pesanan berhasil disimpan & stok diperbarui!');
     } catch (e) { show(e.message, 'error'); }
@@ -417,6 +460,11 @@ function App() {
     a.click();
   };
   const activeLabel = NAV_ITEMS.find((n) => n[0] === active)?.[1];
+  const salesCount = store.orders.reduce((acc, order) => {
+    order.items.forEach((item) => { acc[item.id] = (acc[item.id] || 0) + item.qty; });
+    return acc;
+  }, {});
+  const bestSellingIds = Object.entries(salesCount).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([id]) => id);
 
   return (
     <div className="app">
@@ -434,12 +482,13 @@ function App() {
         <div className="mobile-page-title"><h2>{activeLabel}</h2><p>Operasional kedai dari HP, cepat dan simpel.</p></div>
         {store.loading ? <Splash small /> : <>
           {active === 'dashboard' && <Dashboard revenue={revenue} orders={todaysOrders.length} expense={todayExpense} profit={profit} latest={store.orders} />}
-          {active === 'kasir' && <Kasir menu={store.menu} cart={cart} setCart={setCart} updateCartQty={updateCartQty} addToCart={addToCart} search={search} setSearch={setSearch} cartTotal={cartTotal} checkout={checkout} setActive={setActive} />}
+          {active === 'kasir' && <Kasir menu={store.menu} bestSellingIds={bestSellingIds} cart={cart} setCart={setCart} updateCartQty={updateCartQty} addToCart={addToCart} search={search} setSearch={setSearch} cartTotal={cartTotal} checkout={checkout} setActive={setActive} />}
           {active === 'menu' && <Menu menu={store.menu} newMenu={newMenu} setNewMenu={setNewMenu} addMenu={addMenu} del={async (id) => { await store.deleteMenu(id); setCart((c) => c.filter((i) => i.id !== id)); store.refresh(); show('Menu dihapus'); }} setEdit={setEdit} />}
           {active === 'pesanan' && <Pesanan orders={store.orders} exportCsv={exportCsv} />}
           {active === 'pengeluaran' && <Pengeluaran expenses={store.expenses} expense={expense} setExpense={setExpense} addExpense={addExpense} del={async (id) => { await store.deleteExpense(id); store.refresh(); show('Pengeluaran dihapus'); }} />}
         </>}
         <div className="main-credit"><Credit /></div>
+        {checkoutOpen && <CheckoutModal total={cartTotal} onClose={() => setCheckoutOpen(false)} onPay={processCheckout} />}
         {edit && <div className="modal" onClick={() => setEdit(null)}><form className="modal-card form" onSubmit={saveEdit} onClick={(e) => e.stopPropagation()}><h3>Edit Menu</h3><label>Nama<input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /></label><label>Harga<input type="number" value={edit.price} onChange={(e) => setEdit({ ...edit, price: e.target.value })} /></label><label>Kategori<select value={edit.category} onChange={(e) => setEdit({ ...edit, category: e.target.value })}>{['Minuman', 'Makanan', 'Cemilan', 'Paket'].map((x) => <option key={x}>{x}</option>)}</select></label><label>Stok opsional<input type="number" value={edit.stock ?? ''} onChange={(e) => setEdit({ ...edit, stock: e.target.value })} /></label><button className="primary">Simpan Perubahan</button></form></div>}
       </main>
       <MobileBottomNav active={active} setActive={setActive} />
@@ -447,23 +496,37 @@ function App() {
   );
 }
 
+function CheckoutModal({ total, onClose, onPay }) {
+  const [paid, setPaid] = useState(total);
+  const change = Math.max(0, Number(paid || 0) - total);
+  return <div className="modal" onClick={onClose}><div className="modal-card checkout-sheet" onClick={(e) => e.stopPropagation()}><div className="modal-head"><h3>Pembayaran</h3><button onClick={onClose}><X /></button></div><div className="pay-summary"><span>Total Belanja</span><b>{formatRp(total)}</b></div><label className="pay-input">Uang diterima<input type="number" min={0} value={paid} onChange={(e) => setPaid(e.target.value)} autoFocus /></label><div className="pay-actions"><button type="button" onClick={() => setPaid(total)}>Bayar Pas</button><button type="button" onClick={() => setPaid(Math.ceil(total / 5000) * 5000)}>Bulat 5rb</button></div><div className="change-box"><span>Kembalian</span><b>{formatRp(change)}</b></div><button className="primary" disabled={Number(paid || 0) < total} onClick={() => onPay(paid)}><CheckCircle2 /> Konfirmasi Pembayaran</button></div></div>;
+}
 function MobileTopBar({ activeLabel, user }) { return <div className="mobile-top"><div className="brand-mini"><div className="brand-icon"><Coffee /></div><div><b>WarkopKuu</b><small>{activeLabel}</small></div></div><div className="avatar-mini"><UserCircle2 /><span>{user?.email?.slice(0, 1)?.toUpperCase()}</span></div></div>; }
 function MobileBottomNav({ active, setActive }) { return <div className="bottom-nav">{NAV_ITEMS.map(([id, label, Icon]) => <button key={id} onClick={() => setActive(id)} className={active === id ? 'active' : ''}><Icon /><span>{label}</span></button>)}</div>; }
 function Credit({ compact = false }) { return <div className={compact ? 'credit compact' : 'credit'}>Built by <b>Takis Agency</b><span> · </span>Crafted by <b>Pandu W Aji</b></div>; }
 function Splash({ small }) { return <div className={small ? 'splash small' : 'splash'}><Coffee /><p>Menyiapkan Kedai...</p></div>; }
 function Stat({ icon: Icon, label, value, cls = '' }) { return <div className="stat"><div className={`stat-icon ${cls}`}><Icon /></div><div><p>{label}</p><h3>{value}</h3></div></div>; }
 function Dashboard({ revenue, orders, expense, profit, latest }) { return <section className="space"><h2>Ringkasan Hari Ini</h2><div className="stats"><Stat icon={Receipt} label="Pendapatan" value={formatRp(revenue)} cls="green" /><Stat icon={ShoppingCart} label="Pesanan" value={`${orders} trx`} cls="blue" /><Stat icon={WalletCards} label="Pengeluaran" value={formatRp(expense)} cls="red" /><Stat icon={Package} label="Estimasi Laba" value={formatRp(profit)} cls="amber" /></div><Card title="Transaksi Terakhir">{latest.slice(0, 5).length ? <div className="mobile-card-list">{latest.slice(0, 5).map((o) => <OrderCard key={o.id} order={o} />)}</div> : <Empty text="Belum ada transaksi hari ini." />}</Card></section>; }
-function Kasir({ menu, cart, setCart, updateCartQty, addToCart, search, setSearch, cartTotal, checkout, setActive }) {
+function Kasir({ menu, bestSellingIds, cart, setCart, updateCartQty, addToCart, search, setSearch, cartTotal, checkout, setActive }) {
   const [category, setCategory] = useState('Semua');
   const categories = useMemo(() => ['Semua', ...Array.from(new Set(menu.map((i) => i.category).filter(Boolean)))], [menu]);
-  const filtered = menu.filter((i) => (category === 'Semua' || i.category === category) && i.name.toLowerCase().includes(search.toLowerCase()));
+  const filtered = menu.filter((i) => (category === 'Semua' || i.category === category) && i.name.toLowerCase().includes(search.toLowerCase())).sort((a, b) => (bestSellingIds.includes(b.id) ? 1 : 0) - (bestSellingIds.includes(a.id) ? 1 : 0));
   const totalQty = cart.reduce((s, i) => s + i.qty, 0);
-  return <div className="kasir"><div className="menu-grid-wrap"><div className="search"><Search /><input placeholder="Cari menu..." value={search} onChange={(e) => setSearch(e.target.value)} /></div><div className="category-chips">{categories.map((c) => <button key={c} className={category === c ? 'active' : ''} onClick={() => setCategory(c)}>{c}</button>)}</div>{!menu.length ? <Empty text="Menu masih kosong." action="Tambah menu sekarang" onClick={() => setActive('menu')} /> : <div className="menu-grid">{filtered.map((item) => <button key={item.id} onClick={() => addToCart(item)} className="menu-card"><small>{item.category}</small><b>{item.name}</b><span>{formatRp(item.price)}</span>{item.stock != null && <em>Stok: {item.stock}</em>}</button>)}</div>}</div><div className="cart"><h3><ShoppingCart /> Pesanan Saat Ini {totalQty ? <span>{totalQty} item</span> : null}</h3><div className="cart-list">{cart.length ? cart.map((item) => <div className="cart-item" key={item.id}><div><b>{item.name}</b><small>{formatRp(item.price)}</small></div><div className="qty"><button onClick={() => updateCartQty(item.id, -1)}>-</button><span>{item.qty}</span><button onClick={() => updateCartQty(item.id, 1)}>+</button><button className="danger" onClick={() => setCart((c) => c.filter((x) => x.id !== item.id))}><Trash2 /></button></div></div>) : <Empty text="Belum ada pesanan" />}</div><div className="cart-total"><span>Total</span><b>{formatRp(cartTotal)}</b><button disabled={!cart.length} onClick={checkout}><CheckCircle2 /> Proses Pembayaran</button></div></div></div>;
+  return <div className="kasir"><div className="menu-grid-wrap"><div className="search"><Search /><input placeholder="Cari menu..." value={search} onChange={(e) => setSearch(e.target.value)} /></div><div className="category-chips">{categories.map((c) => <button key={c} className={category === c ? 'active' : ''} onClick={() => setCategory(c)}>{c}</button>)}</div>{!menu.length ? <Empty text="Menu masih kosong." action="Tambah menu sekarang" onClick={() => setActive('menu')} /> : <div className="menu-grid">{filtered.map((item) => <button key={item.id} onClick={() => addToCart(item)} className="menu-card"><small>{item.category}{bestSellingIds.includes(item.id) ? ' · Terlaris' : ''}</small><b>{item.name}</b><span>{formatRp(item.price)}</span>{item.stock != null && <em>Stok: {item.stock}</em>}</button>)}</div>}</div><div className="cart"><h3><ShoppingCart /> Pesanan Saat Ini {totalQty ? <span>{totalQty} item</span> : null}</h3><div className="cart-list">{cart.length ? cart.map((item) => <div className="cart-item" key={item.id}><div><b>{item.name}</b><small>{formatRp(item.price)}</small></div><div className="qty"><button onClick={() => updateCartQty(item.id, -1)}>-</button><span>{item.qty}</span><button onClick={() => updateCartQty(item.id, 1)}>+</button><button className="danger" onClick={() => setCart((c) => c.filter((x) => x.id !== item.id))}><Trash2 /></button></div></div>) : <Empty text="Belum ada pesanan" />}</div><div className="cart-total"><span>Total</span><b>{formatRp(cartTotal)}</b><button disabled={!cart.length} onClick={checkout}><CheckCircle2 /> Proses Pembayaran</button></div></div></div>;
 }
-function Menu({ menu, newMenu, setNewMenu, addMenu, del, setEdit }) { return <section className="space"><Card title="Tambah Menu Baru"><form onSubmit={addMenu} className="grid-form"><label>Nama Menu<input value={newMenu.name} onChange={(e) => setNewMenu({ ...newMenu, name: e.target.value })} placeholder="Kopi Hitam" /></label><label>Harga (Rp)<input type="number" min="0" value={newMenu.price} onChange={(e) => setNewMenu({ ...newMenu, price: e.target.value })} placeholder="5000" /></label><label>Kategori<select value={newMenu.category} onChange={(e) => setNewMenu({ ...newMenu, category: e.target.value })}>{['Minuman', 'Makanan', 'Cemilan', 'Paket'].map((x) => <option key={x}>{x}</option>)}</select></label><label>Stok opsional<input type="number" min="0" value={newMenu.stock} onChange={(e) => setNewMenu({ ...newMenu, stock: e.target.value })} placeholder="Opsional" /></label><button className="dark"><Plus /> Simpan</button></form></Card><Card title={`Daftar Menu (${menu.length})`}>{menu.length ? <><div className="menu-list-mobile">{menu.map((i) => <div className="list-card" key={i.id}><div><b>{i.name}</b><small>{i.category} · {formatRp(i.price)} · Stok {i.stock ?? '—'}</small></div><div><button onClick={() => setEdit(i)}><Pencil /></button><button className="danger" onClick={() => del(i.id)}><Trash2 /></button></div></div>)}</div><table className="desktop-table"><thead><tr><th>Nama</th><th>Kategori</th><th>Harga</th><th>Stok</th><th>Aksi</th></tr></thead><tbody>{menu.map((i) => <tr key={i.id}><td><b>{i.name}</b></td><td><span className="badge">{i.category}</span></td><td>{formatRp(i.price)}</td><td>{i.stock ?? '—'}</td><td><button onClick={() => setEdit(i)}><Pencil /></button><button className="danger" onClick={() => del(i.id)}><Trash2 /></button></td></tr>)}</tbody></table></> : <Empty text="Belum ada data menu." />}</Card></section>; }
-function Pesanan({ orders, exportCsv }) { return <Card title="Riwayat Transaksi" action={<button onClick={exportCsv}><Download /> CSV</button>}>{orders.length ? <><div className="mobile-card-list">{orders.map((o) => <OrderCard key={o.id} order={o} />)}</div><table className="desktop-table"><thead><tr><th>Waktu</th><th>Detail Pesanan</th><th className="right">Total</th></tr></thead><tbody>{orders.map((o) => <tr key={o.id}><td>{formatDate(o.timestamp)}</td><td>{o.items.map((i, idx) => <span className="chip" key={idx}>{i.qty}x {i.name}</span>)}</td><td className="right"><b>{formatRp(o.total)}</b></td></tr>)}</tbody></table></> : <Empty text="Belum ada transaksi." />}</Card>; }
+function Menu({ menu, newMenu, setNewMenu, addMenu, del, setEdit }) {
+  const [addOpen, setAddOpen] = useState(false);
+  const form = <form onSubmit={(e) => { addMenu(e); setAddOpen(false); }} className="grid-form"><label>Nama Menu<input value={newMenu.name} onChange={(e) => setNewMenu({ ...newMenu, name: e.target.value })} placeholder="Kopi Hitam" /></label><label>Harga (Rp)<input type="number" min="0" value={newMenu.price} onChange={(e) => setNewMenu({ ...newMenu, price: e.target.value })} placeholder="5000" /></label><label>Kategori<select value={newMenu.category} onChange={(e) => setNewMenu({ ...newMenu, category: e.target.value })}>{['Minuman', 'Makanan', 'Cemilan', 'Paket'].map((x) => <option key={x}>{x}</option>)}</select></label><label>Stok opsional<input type="number" min="0" value={newMenu.stock} onChange={(e) => setNewMenu({ ...newMenu, stock: e.target.value })} placeholder="Opsional" /></label><button className="dark"><Plus /> Simpan</button></form>;
+  return <section className="space"><div className="add-menu-card"><Card title="Tambah Menu Baru">{form}</Card></div><button className="fab-menu" onClick={() => setAddOpen(true)}><Plus /> Menu</button>{addOpen && <div className="modal" onClick={() => setAddOpen(false)}><div className="modal-card" onClick={(e) => e.stopPropagation()}><div className="modal-head"><h3>Tambah Menu Baru</h3><button onClick={() => setAddOpen(false)}><X /></button></div>{form}</div></div>}<Card title={`Daftar Menu (${menu.length})`}>{menu.length ? <><div className="menu-list-mobile">{menu.map((i) => <div className="list-card" key={i.id}><div><b>{i.name}</b><small>{i.category} · {formatRp(i.price)} · Stok {i.stock ?? '—'}</small></div><div><button onClick={() => setEdit(i)}><Pencil /></button><button className="danger" onClick={() => del(i.id)}><Trash2 /></button></div></div>)}</div><table className="desktop-table"><thead><tr><th>Nama</th><th>Kategori</th><th>Harga</th><th>Stok</th><th>Aksi</th></tr></thead><tbody>{menu.map((i) => <tr key={i.id}><td><b>{i.name}</b></td><td><span className="badge">{i.category}</span></td><td>{formatRp(i.price)}</td><td>{i.stock ?? '—'}</td><td><button onClick={() => setEdit(i)}><Pencil /></button><button className="danger" onClick={() => del(i.id)}><Trash2 /></button></td></tr>)}</tbody></table></> : <Empty text="Belum ada data menu." />}</Card></section>;
+}
+function Pesanan({ orders, exportCsv }) {
+  const [period, setPeriod] = useState('all');
+  const minTime = period === 'today' ? todayStart() : period === 'week' ? weekStart() : period === 'month' ? monthStart() : 0;
+  const filtered = orders.filter((o) => o.timestamp >= minTime);
+  return <Card title="Riwayat Transaksi" action={<button onClick={exportCsv}><Download /> CSV</button>}><div className="period-chips">{[['all', 'Semua'], ['today', 'Hari ini'], ['week', 'Minggu ini'], ['month', 'Bulan ini']].map(([id, label]) => <button key={id} className={period === id ? 'active' : ''} onClick={() => setPeriod(id)}>{label}</button>)}</div>{filtered.length ? <><div className="mobile-card-list">{filtered.map((o) => <OrderCard key={o.id} order={o} />)}</div><table className="desktop-table"><thead><tr><th>No</th><th>Waktu</th><th>Detail Pesanan</th><th className="right">Total</th><th>Aksi</th></tr></thead><tbody>{filtered.map((o) => <tr key={o.id}><td><b>{receiptNo(o)}</b></td><td>{formatDate(o.timestamp)}</td><td>{o.items.map((i, idx) => <span className="chip" key={idx}>{i.qty}x {i.name}</span>)}</td><td className="right"><b>{formatRp(o.total)}</b></td><td><a className="share-link" href={`https://wa.me/?text=${encodeURIComponent(receiptText(o))}`} target="_blank" rel="noreferrer">Share</a></td></tr>)}</tbody></table></> : <Empty text="Belum ada transaksi pada periode ini." />}</Card>;
+}
 function Pengeluaran({ expenses, expense, setExpense, addExpense, del }) { return <section className="space"><Card title="Catat Pengeluaran"><form onSubmit={addExpense} className="grid-form"><label>Nama Pengeluaran<input value={expense.name} onChange={(e) => setExpense({ ...expense, name: e.target.value })} placeholder="Belanja kopi / gula" /></label><label>Nominal<input type="number" value={expense.amount} onChange={(e) => setExpense({ ...expense, amount: e.target.value })} /></label><label>Kategori<select value={expense.category} onChange={(e) => setExpense({ ...expense, category: e.target.value })}>{['Belanja Bahan', 'Operasional', 'Gaji', 'Sewa', 'Lainnya'].map((x) => <option key={x}>{x}</option>)}</select></label><button className="dark">Simpan</button></form></Card><Card title="Riwayat Pengeluaran">{expenses.length ? <div className="mobile-card-list always">{expenses.map((e) => <div className="order-card" key={e.id}><div><b>{e.name}</b><small>{formatDate(e.timestamp)}</small><span className="badge">{e.category}</span></div><div className="order-total"><b>{formatRp(e.amount)}</b><button className="danger" onClick={() => del(e.id)}><Trash2 /></button></div></div>)}</div> : <Empty text="Belum ada pengeluaran." />}</Card></section>; }
-function OrderCard({ order }) { return <div className="order-card"><div><b>{formatDate(order.timestamp)}</b><small>{order.items.map((i) => `${i.qty}x ${i.name}`).join(', ')}</small></div><div className="order-total">{formatRp(order.total)}</div></div>; }
+function OrderCard({ order }) { return <div className="order-card"><div><b>{receiptNo(order)}</b><small>{formatDate(order.timestamp)}</small><small>{order.items.map((i) => `${i.qty}x ${i.name}`).join(', ')}</small>{paidAmount(order) ? <small>Dibayar {formatRp(paidAmount(order))} · Kembali {formatRp(changeAmount(order))}</small> : null}</div><div className="order-total"><b>{formatRp(order.total)}</b><a className="share-link" href={`https://wa.me/?text=${encodeURIComponent(receiptText(order))}`} target="_blank" rel="noreferrer">Share</a></div></div>; }
 function Card({ title, children, action }) { return <div className="card"><div className="card-head"><h3>{title}</h3>{action}</div>{children}</div>; }
 function Empty({ text, action, onClick }) { return <div className="empty"><Coffee /><p>{text}</p>{action && <button onClick={onClick}>{action}</button>}</div>; }
 createRoot(document.getElementById('root')).render(<App />);
