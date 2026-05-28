@@ -337,17 +337,46 @@ function App() {
   const todayExpense = store.expenses.filter((e) => e.timestamp >= todayStart()).reduce((s, e) => s + Number(e.amount || 0), 0);
   const profit = revenue - todayExpense;
   const addToCart = (item) => setCart((prev) => {
+    const existingQty = prev.find((i) => i.id === item.id)?.qty || 0;
+    if (item.stock != null && existingQty + 1 > Number(item.stock)) {
+      show(`Stok ${item.name} tidak cukup`, 'error');
+      return prev;
+    }
     const ex = prev.find((i) => i.id === item.id);
     return ex ? prev.map((i) => (i.id === item.id ? { ...i, qty: i.qty + 1 } : i)) : [...prev, { ...item, qty: 1 }];
   });
+  const updateCartQty = (id, delta) => setCart((prev) => prev.map((item) => {
+    if (item.id !== id) return item;
+    const nextQty = Math.max(1, item.qty + delta);
+    if (item.stock != null && nextQty > Number(item.stock)) {
+      show(`Stok ${item.name} hanya ${item.stock}`, 'error');
+      return item;
+    }
+    return { ...item, qty: nextQty };
+  }));
   const cartTotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
   const checkout = async () => {
     if (!cart.length) return;
+    const stockIssue = cart.find((cartItem) => {
+      const latest = store.menu.find((menuItem) => menuItem.id === cartItem.id);
+      return latest?.stock != null && cartItem.qty > Number(latest.stock);
+    });
+    if (stockIssue) {
+      const latest = store.menu.find((menuItem) => menuItem.id === stockIssue.id);
+      show(`Stok ${stockIssue.name} tidak cukup. Sisa ${latest?.stock ?? 0}`, 'error');
+      return;
+    }
     try {
       await store.addOrder({ items: cart, total: cartTotal, timestamp: now() });
+      await Promise.all(cart.map((cartItem) => {
+        const latest = store.menu.find((menuItem) => menuItem.id === cartItem.id);
+        if (latest?.stock == null) return Promise.resolve();
+        const nextStock = Math.max(0, Number(latest.stock) - cartItem.qty);
+        return store.updateMenu(cartItem.id, { stock: nextStock });
+      }));
       setCart([]);
-      store.refresh();
-      show('Pesanan berhasil disimpan!');
+      await store.refresh();
+      show('Pesanan berhasil disimpan & stok diperbarui!');
     } catch (e) { show(e.message, 'error'); }
   };
   const addMenu = async (e) => {
@@ -405,7 +434,7 @@ function App() {
         <div className="mobile-page-title"><h2>{activeLabel}</h2><p>Operasional kedai dari HP, cepat dan simpel.</p></div>
         {store.loading ? <Splash small /> : <>
           {active === 'dashboard' && <Dashboard revenue={revenue} orders={todaysOrders.length} expense={todayExpense} profit={profit} latest={store.orders} />}
-          {active === 'kasir' && <Kasir menu={store.menu} cart={cart} setCart={setCart} addToCart={addToCart} search={search} setSearch={setSearch} cartTotal={cartTotal} checkout={checkout} setActive={setActive} />}
+          {active === 'kasir' && <Kasir menu={store.menu} cart={cart} setCart={setCart} updateCartQty={updateCartQty} addToCart={addToCart} search={search} setSearch={setSearch} cartTotal={cartTotal} checkout={checkout} setActive={setActive} />}
           {active === 'menu' && <Menu menu={store.menu} newMenu={newMenu} setNewMenu={setNewMenu} addMenu={addMenu} del={async (id) => { await store.deleteMenu(id); setCart((c) => c.filter((i) => i.id !== id)); store.refresh(); show('Menu dihapus'); }} setEdit={setEdit} />}
           {active === 'pesanan' && <Pesanan orders={store.orders} exportCsv={exportCsv} />}
           {active === 'pengeluaran' && <Pengeluaran expenses={store.expenses} expense={expense} setExpense={setExpense} addExpense={addExpense} del={async (id) => { await store.deleteExpense(id); store.refresh(); show('Pengeluaran dihapus'); }} />}
@@ -424,12 +453,12 @@ function Credit({ compact = false }) { return <div className={compact ? 'credit 
 function Splash({ small }) { return <div className={small ? 'splash small' : 'splash'}><Coffee /><p>Menyiapkan Kedai...</p></div>; }
 function Stat({ icon: Icon, label, value, cls = '' }) { return <div className="stat"><div className={`stat-icon ${cls}`}><Icon /></div><div><p>{label}</p><h3>{value}</h3></div></div>; }
 function Dashboard({ revenue, orders, expense, profit, latest }) { return <section className="space"><h2>Ringkasan Hari Ini</h2><div className="stats"><Stat icon={Receipt} label="Pendapatan" value={formatRp(revenue)} cls="green" /><Stat icon={ShoppingCart} label="Pesanan" value={`${orders} trx`} cls="blue" /><Stat icon={WalletCards} label="Pengeluaran" value={formatRp(expense)} cls="red" /><Stat icon={Package} label="Estimasi Laba" value={formatRp(profit)} cls="amber" /></div><Card title="Transaksi Terakhir">{latest.slice(0, 5).length ? <div className="mobile-card-list">{latest.slice(0, 5).map((o) => <OrderCard key={o.id} order={o} />)}</div> : <Empty text="Belum ada transaksi hari ini." />}</Card></section>; }
-function Kasir({ menu, cart, setCart, addToCart, search, setSearch, cartTotal, checkout, setActive }) {
+function Kasir({ menu, cart, setCart, updateCartQty, addToCart, search, setSearch, cartTotal, checkout, setActive }) {
   const [category, setCategory] = useState('Semua');
   const categories = useMemo(() => ['Semua', ...Array.from(new Set(menu.map((i) => i.category).filter(Boolean)))], [menu]);
   const filtered = menu.filter((i) => (category === 'Semua' || i.category === category) && i.name.toLowerCase().includes(search.toLowerCase()));
   const totalQty = cart.reduce((s, i) => s + i.qty, 0);
-  return <div className="kasir"><div className="menu-grid-wrap"><div className="search"><Search /><input placeholder="Cari menu..." value={search} onChange={(e) => setSearch(e.target.value)} /></div><div className="category-chips">{categories.map((c) => <button key={c} className={category === c ? 'active' : ''} onClick={() => setCategory(c)}>{c}</button>)}</div>{!menu.length ? <Empty text="Menu masih kosong." action="Tambah menu sekarang" onClick={() => setActive('menu')} /> : <div className="menu-grid">{filtered.map((item) => <button key={item.id} onClick={() => addToCart(item)} className="menu-card"><small>{item.category}</small><b>{item.name}</b><span>{formatRp(item.price)}</span>{item.stock != null && <em>Stok: {item.stock}</em>}</button>)}</div>}</div><div className="cart"><h3><ShoppingCart /> Pesanan Saat Ini {totalQty ? <span>{totalQty} item</span> : null}</h3><div className="cart-list">{cart.length ? cart.map((item) => <div className="cart-item" key={item.id}><div><b>{item.name}</b><small>{formatRp(item.price)}</small></div><div className="qty"><button onClick={() => setCart((c) => c.map((x) => x.id === item.id ? { ...x, qty: Math.max(1, x.qty - 1) } : x))}>-</button><span>{item.qty}</span><button onClick={() => setCart((c) => c.map((x) => x.id === item.id ? { ...x, qty: x.qty + 1 } : x))}>+</button><button className="danger" onClick={() => setCart((c) => c.filter((x) => x.id !== item.id))}><Trash2 /></button></div></div>) : <Empty text="Belum ada pesanan" />}</div><div className="cart-total"><span>Total</span><b>{formatRp(cartTotal)}</b><button disabled={!cart.length} onClick={checkout}><CheckCircle2 /> Proses Pembayaran</button></div></div></div>;
+  return <div className="kasir"><div className="menu-grid-wrap"><div className="search"><Search /><input placeholder="Cari menu..." value={search} onChange={(e) => setSearch(e.target.value)} /></div><div className="category-chips">{categories.map((c) => <button key={c} className={category === c ? 'active' : ''} onClick={() => setCategory(c)}>{c}</button>)}</div>{!menu.length ? <Empty text="Menu masih kosong." action="Tambah menu sekarang" onClick={() => setActive('menu')} /> : <div className="menu-grid">{filtered.map((item) => <button key={item.id} onClick={() => addToCart(item)} className="menu-card"><small>{item.category}</small><b>{item.name}</b><span>{formatRp(item.price)}</span>{item.stock != null && <em>Stok: {item.stock}</em>}</button>)}</div>}</div><div className="cart"><h3><ShoppingCart /> Pesanan Saat Ini {totalQty ? <span>{totalQty} item</span> : null}</h3><div className="cart-list">{cart.length ? cart.map((item) => <div className="cart-item" key={item.id}><div><b>{item.name}</b><small>{formatRp(item.price)}</small></div><div className="qty"><button onClick={() => updateCartQty(item.id, -1)}>-</button><span>{item.qty}</span><button onClick={() => updateCartQty(item.id, 1)}>+</button><button className="danger" onClick={() => setCart((c) => c.filter((x) => x.id !== item.id))}><Trash2 /></button></div></div>) : <Empty text="Belum ada pesanan" />}</div><div className="cart-total"><span>Total</span><b>{formatRp(cartTotal)}</b><button disabled={!cart.length} onClick={checkout}><CheckCircle2 /> Proses Pembayaran</button></div></div></div>;
 }
 function Menu({ menu, newMenu, setNewMenu, addMenu, del, setEdit }) { return <section className="space"><Card title="Tambah Menu Baru"><form onSubmit={addMenu} className="grid-form"><label>Nama Menu<input value={newMenu.name} onChange={(e) => setNewMenu({ ...newMenu, name: e.target.value })} placeholder="Kopi Hitam" /></label><label>Harga (Rp)<input type="number" min="0" value={newMenu.price} onChange={(e) => setNewMenu({ ...newMenu, price: e.target.value })} placeholder="5000" /></label><label>Kategori<select value={newMenu.category} onChange={(e) => setNewMenu({ ...newMenu, category: e.target.value })}>{['Minuman', 'Makanan', 'Cemilan', 'Paket'].map((x) => <option key={x}>{x}</option>)}</select></label><label>Stok opsional<input type="number" min="0" value={newMenu.stock} onChange={(e) => setNewMenu({ ...newMenu, stock: e.target.value })} placeholder="Opsional" /></label><button className="dark"><Plus /> Simpan</button></form></Card><Card title={`Daftar Menu (${menu.length})`}>{menu.length ? <><div className="menu-list-mobile">{menu.map((i) => <div className="list-card" key={i.id}><div><b>{i.name}</b><small>{i.category} · {formatRp(i.price)} · Stok {i.stock ?? '—'}</small></div><div><button onClick={() => setEdit(i)}><Pencil /></button><button className="danger" onClick={() => del(i.id)}><Trash2 /></button></div></div>)}</div><table className="desktop-table"><thead><tr><th>Nama</th><th>Kategori</th><th>Harga</th><th>Stok</th><th>Aksi</th></tr></thead><tbody>{menu.map((i) => <tr key={i.id}><td><b>{i.name}</b></td><td><span className="badge">{i.category}</span></td><td>{formatRp(i.price)}</td><td>{i.stock ?? '—'}</td><td><button onClick={() => setEdit(i)}><Pencil /></button><button className="danger" onClick={() => del(i.id)}><Trash2 /></button></td></tr>)}</tbody></table></> : <Empty text="Belum ada data menu." />}</Card></section>; }
 function Pesanan({ orders, exportCsv }) { return <Card title="Riwayat Transaksi" action={<button onClick={exportCsv}><Download /> CSV</button>}>{orders.length ? <><div className="mobile-card-list">{orders.map((o) => <OrderCard key={o.id} order={o} />)}</div><table className="desktop-table"><thead><tr><th>Waktu</th><th>Detail Pesanan</th><th className="right">Total</th></tr></thead><tbody>{orders.map((o) => <tr key={o.id}><td>{formatDate(o.timestamp)}</td><td>{o.items.map((i, idx) => <span className="chip" key={idx}>{i.qty}x {i.name}</span>)}</td><td className="right"><b>{formatRp(o.total)}</b></td></tr>)}</tbody></table></> : <Empty text="Belum ada transaksi." />}</Card>; }
