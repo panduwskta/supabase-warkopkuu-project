@@ -159,7 +159,8 @@ Hal-hal berikut belum menjadi fokus v2 awal:
 - Akuntansi lengkap
 - Payroll/karyawan lengkap
 - Marketplace/inventory warehouse kompleks
-- Native mobile app iOS/Android
+- Native iOS app
+- Android Play Store release sebagai target distribusi jangka pendek/menengah, tetapi tidak wajib mengubah MVP v2 menjadi native app penuh sejak awal
 - AI assistant di dalam app
 - Subscription billing
 - Integrasi printer thermal yang kompleks
@@ -243,6 +244,19 @@ Kasir harus mendukung:
 - Data user terpisah per akun.
 - Supabase tetap menjadi sumber data utama.
 - Fallback lokal boleh tetap ada untuk demo jika env Supabase tidak tersedia.
+
+#### H. Play Store Readiness Foundation
+
+Warungin v2 perlu disiapkan agar tidak menutup jalan menuju Google Play Store.
+
+Requirement awal:
+
+- UI tetap mobile-first dan layak digunakan sebagai app Android.
+- App harus punya nama, ikon, warna brand, dan deskripsi produk yang konsisten.
+- Alur login/register tidak boleh terasa seperti demo internal.
+- App harus punya halaman/legal copy untuk Privacy Policy sebelum submit Play Store.
+- Penggunaan permission Android harus minimal. Hindari permission sensitif kecuali benar-benar dibutuhkan.
+- Jika memakai wrapper Android/PWA-to-APK, pengalaman utama tetap harus stabil: login, kasir, dashboard, transaksi, dan riwayat.
 
 ### 8.2 Should-Have
 
@@ -543,6 +557,15 @@ User bisa menyimpan cart sebagai bill terbuka dan melanjutkan checkout nanti.
 - Bottom navigation tetap mudah dijangkau.
 - Form input nominal harus nyaman di keyboard HP.
 
+### Android / Play Store Readiness
+
+- Produk harus bisa dikemas sebagai Android app tanpa mengubah core business logic secara besar.
+- Kandidat pendekatan teknis perlu dibandingkan di TRD: PWA installable, Trusted Web Activity (TWA), Capacitor, atau native rebuild di masa depan.
+- App harus memiliki Privacy Policy publik sebelum Play Store submission.
+- Data Safety Form Google Play harus bisa dijawab dengan jelas berdasarkan data yang dikumpulkan: akun, email, data toko, produk, transaksi, pengeluaran.
+- Permission Android harus dijaga seminimal mungkin. Kamera/barcode, storage, Bluetooth print, atau notifikasi tidak boleh menjadi permission wajib jika fiturnya belum masuk scope.
+- App listing assets perlu disiapkan: app icon, feature graphic, screenshot mobile, short description, full description, dan contact email.
+
 ### Maintainability
 
 - Struktur kode harus siap untuk pemisahan fitur.
@@ -606,6 +629,15 @@ User bisa menyimpan cart sebagai bill terbuka dan melanjutkan checkout nanti.
 - Multi-user planning
 - Barcode/foto produk jika dibutuhkan
 
+### Phase 5 — Android / Play Store Candidate
+
+- Tentukan pendekatan distribusi Android: TWA/PWA wrapper, Capacitor, atau native rebuild future
+- Siapkan Privacy Policy dan halaman legal publik
+- Siapkan app icon, feature graphic, screenshot, short description, full description
+- Siapkan Google Play Console account, package name, signing key, internal testing track
+- Uji flow utama di perangkat Android: login/register, kasir, checkout, riwayat, share struk
+- Isi Data Safety Form berdasarkan data collection Warungin
+
 ---
 
 ## 16. Open Questions
@@ -617,6 +649,9 @@ User bisa menyimpan cart sebagai bill terbuka dan melanjutkan checkout nanti.
 5. Apakah Warungin akan punya landing page publik terpisah?
 6. Apakah struk perlu format PNG/download, atau WhatsApp text dulu cukup?
 7. Apakah data demo/sample menu perlu disediakan saat onboarding?
+8. Apakah target Play Store memakai pendekatan PWA/TWA, Capacitor wrapper, atau native app di fase berikutnya?
+9. Apakah Play Store submission ditargetkan untuk v2 awal, v2.1, atau setelah produk web stabil?
+10. Apakah kita sudah punya Google Play Console developer account dan nama package kandidat, misalnya `id.takisagency.warungin`?
 
 ---
 
@@ -650,6 +685,12 @@ Untuk rilis v2 yang realistis, rekomendasi scope adalah:
 - Stock in/out
 - Weighted average HPP
 - Printer/receipt PNG
+
+### Android / Play Store Track
+
+- Rekomendasi awal: stabilkan Warungin sebagai web/PWA mobile-first dulu, lalu bungkus ke Android memakai TWA atau Capacitor setelah flow core terbukti stabil.
+- Jangan rebuild native dari nol untuk tahap awal karena akan memperlambat validasi produk.
+- Play Store readiness mulai disiapkan sejak PRD/TRD: privacy policy, data safety, app assets, dan package/signing plan.
 
 ---
 
