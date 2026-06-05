@@ -1,7 +1,7 @@
-# SRD — Warungin v2
+# DOR — Warungin v2
 
 **Status:** Draft v0.1  
-**Document type:** Source Rules Document / Sprint Requirements Document  
+**Document type:** Development Operating Rules / Sprint & Vibecoding Rules  
 **Product:** Warungin / Warungin POS  
 **Related PRD:** `docs/PRD-Warungin-v2.md`  
 **Related TRD:** `docs/TRD-Warungin-v2.md`  
@@ -11,11 +11,11 @@
 
 ## 1. Purpose
 
-SRD ini adalah source of truth untuk cara kerja development Warungin v2.
+Dokumen ini adalah source of truth untuk cara kerja development Warungin v2.
 
 PRD menjawab: **apa yang mau dibangun.**  
 TRD menjawab: **gimana cara bangunnya.**  
-SRD menjawab: **aturan eksekusi, sprint, approval gate, dan disiplin development supaya proses coding tidak melebar.**
+DOR menjawab: **aturan eksekusi, sprint, approval gate, dan disiplin development supaya proses coding tidak melebar.**
 
 Dokumen ini wajib dipakai sebelum masuk tahap development, terutama saat vibecoding dengan AI assistant.
 
@@ -46,7 +46,7 @@ Alur kerja resmi Warungin v2:
 
 ```text
 brainstorming
-  → PRD / TRD / SRD
+  → PRD / TRD / SRS / DOR
   → cari skill & acuan teknis
   → bagi jadi sprint kecil
   → per sprint:
@@ -67,15 +67,16 @@ Development tidak boleh langsung loncat ke coding tanpa implementation plan yang
 Jika ada konflik instruksi:
 
 1. Instruksi user terbaru.
-2. SRD — aturan eksekusi dan sprint.
-3. PRD — scope produk dan kebutuhan user.
-4. TRD — arsitektur dan keputusan teknis.
-5. Existing codebase.
-6. Referensi eksternal/skill/framework docs.
+2. DOR/SRD lama — aturan eksekusi dan sprint.
+3. SRS — spesifikasi kebutuhan sistem formal.
+4. PRD — scope produk dan kebutuhan user.
+5. TRD — arsitektur dan keputusan teknis.
+6. Existing codebase.
+7. Referensi eksternal/skill/framework docs.
 
 Catatan:
 
-- PRD/TRD/SRD bisa diupdate jika keputusan berubah.
+- PRD/TRD/SRS/DOR bisa diupdate jika keputusan berubah.
 - Update dokumen harus dilakukan sebelum implementasi jika perubahan berdampak ke scope/arsitektur.
 - Jangan diam-diam mengubah keputusan produk/teknis di kode tanpa update dokumen.
 
@@ -648,9 +649,9 @@ If asked to “lanjut coding” without a sprint decision, assistant should ask 
 
 ---
 
-## 15. SRD Acceptance Criteria
+## 15. DOR Acceptance Criteria
 
-SRD is accepted when:
+DOR is accepted when:
 
 - Development flow is clear.
 - Implementation plan gate is mandatory.
