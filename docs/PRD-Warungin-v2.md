@@ -1,6 +1,6 @@
 # PRD — Warungin v2
 
-**Status:** Draft v0.3 — scope decisions locked  
+**Status:** Draft v0.4 — desktop/export decisions locked  
 **Product:** Warungin  
 **Product label:** Warungin POS  
 **Previous baseline:** WarkopKuu v1  
@@ -36,7 +36,7 @@ WarkopKuu v1 sudah memiliki fondasi utama:
 - Manajemen menu dan stok
 - Stok otomatis berkurang saat checkout
 - Riwayat pesanan
-- Export CSV
+- Export CSV/Excel
 - Catat pengeluaran
 - Mobile-first bottom navigation
 - Quick add menu bottom sheet
@@ -244,7 +244,7 @@ Kasir harus mendukung:
 - List transaksi terbaru
 - Detail transaksi
 - Filter berdasarkan tanggal/status/kata kunci sederhana
-- Export CSV
+- Export CSV/Excel
 - Share ulang struk
 - Ringkasan total periode terpilih
 
@@ -314,13 +314,17 @@ Requirement awal:
 
 Warungin akan memiliki landing page publik terpisah.
 
-Landing page ini nantinya juga menjadi portal masuk ke dashboard desktop yang terintegrasi dengan akun Warungin.
+Landing page ini nantinya juga menjadi portal masuk ke dashboard desktop yang terintegrasi dengan akun Warungin. Untuk v2, desktop dashboard memakai scope minimal, bukan full fitur manajerial.
 
 Requirement awal:
 
 - Product architecture harus menyiapkan pemisahan mobile app dan desktop dashboard.
 - Data cloud harus bisa dipakai lintas device secara realtime/near-realtime.
-- Dashboard desktop diarahkan untuk kebutuhan manajerial: update stok, pembukuan tertinggal, review laporan, dan operasional yang lebih nyaman dari layar besar.
+- Desktop dashboard v2 minimal menampilkan laporan basic: penjualan, transaksi, pengeluaran, laba estimasi, produk/menu terlaris, dan ringkasan periode.
+- Desktop dashboard v2 harus menyediakan export laporan ke Excel dan PDF.
+- PDF report harus report-ready: punya header brand/store, periode laporan, summary angka utama, grafik/visual ringkas jika tersedia, tabel pendukung, dan timestamp export.
+- Beberapa nav/menu desktop boleh ditampilkan sebagai **Coming Soon** untuk fitur manajerial lanjutan seperti update stok detail, pembukuan lanjutan, multi-user, dan laporan advanced.
+- Full desktop manajerial disimpan untuk versi setelah mobile app stabil.
 
 #### M. Play Store Readiness Foundation
 
@@ -366,7 +370,8 @@ Minimal v2 cukup selectable dan muncul di riwayat/struk.
 
 Karena Warungin cloud-first, backup JSON bukan prioritas utama, tetapi tetap berguna untuk trust.
 
-- Export transaksi/menu/pengeluaran ke CSV/JSON
+- Export transaksi/menu/pengeluaran ke CSV/Excel/JSON
+- Export laporan dashboard ke PDF report-ready
 - Import belum wajib di v2 awal
 
 #### D. Better Empty States & Onboarding
@@ -477,13 +482,15 @@ Warungin = sederhana, cloud-first, offline-capable, mobile-first, lebih ringan u
 5. Saat koneksi kembali tersedia, app melakukan sync otomatis ke cloud.
 6. App memberi status sync berhasil atau gagal dengan opsi retry.
 
-### 10.6 Flow Desktop Dashboard — Future Foundation
+### 10.6 Flow Desktop Dashboard — Minimal v2
 
 1. User membuka landing page publik Warungin.
 2. User login ke dashboard desktop dengan akun yang sama.
 3. Dashboard desktop mengambil data cloud dari mobile app.
-4. User bisa melakukan pekerjaan manajerial dari desktop, seperti update stok, melengkapi pembukuan, dan review laporan.
-5. Perubahan dari desktop tersinkron kembali ke app mobile.
+4. User melihat laporan basic: penjualan, transaksi, pengeluaran, laba estimasi, produk/menu terlaris, dan ringkasan periode.
+5. User bisa export laporan ke Excel dan PDF report-ready.
+6. Nav/menu untuk fitur manajerial lanjutan boleh tampil sebagai Coming Soon.
+7. Perubahan data manajerial penuh dari desktop belum menjadi scope v2 dan disimpan untuk versi setelah mobile stabil.
 
 ---
 
@@ -648,7 +655,7 @@ User harus bisa mencatat pengeluaran dan melihat dampaknya di dashboard.
 
 ### FR-011 Export
 
-User harus bisa export data transaksi minimal CSV.
+User harus bisa export data transaksi minimal CSV/Excel. Untuk laporan dashboard, user harus bisa export PDF report-ready yang berisi summary, grafik/visual ringkas jika tersedia, dan tabel pendukung.
 
 ### FR-012 Offline-Capable Local Realtime
 
@@ -662,9 +669,9 @@ User harus bisa membuat struk dalam format PNG dan membagikannya ke WhatsApp ata
 
 User baru harus bisa mencoba aplikasi dengan data sample saat onboarding, baik dalam mode login maupun mode eksplorasi anonim.
 
-### FR-015 Landing Page & Desktop Dashboard Foundation
+### FR-015 Landing Page & Desktop Dashboard Minimal
 
-Warungin perlu disiapkan untuk memiliki landing page publik terpisah yang juga menjadi portal masuk ke dashboard desktop terintegrasi.
+Warungin perlu memiliki landing page publik terpisah yang juga menjadi portal masuk ke dashboard desktop minimal. Dashboard desktop v2 menampilkan laporan basic dan export Excel/PDF, sementara fitur manajerial lanjutan boleh ditampilkan sebagai Coming Soon.
 
 ### FR-016 Open Bill — Future/v2.1
 
@@ -767,7 +774,8 @@ User bisa menyimpan cart sebagai bill terbuka dan melanjutkan checkout nanti. Fi
 - Menu/stok lebih matang
 - Pengeluaran lebih rapi
 - HPP/modal wajib di produk, tetapi tidak menghambat trial/onboarding
-- Export lebih jelas
+- Export lebih jelas: CSV/Excel dan PDF report-ready
+- Desktop dashboard minimal: laporan basic + export Excel/PDF + Coming Soon nav
 - Receipt PNG + WhatsApp/share sheet
 - Demo/sample data onboarding
 
@@ -791,22 +799,23 @@ User bisa menyimpan cart sebagai bill terbuka dan melanjutkan checkout nanti. Fi
 
 ---
 
-## 16. Product Decisions — Locked v0.3
+## 16. Product Decisions — Locked v0.4
 
 1. **Cloud-first, offline-capable.** Warungin tetap cloud-first, tetapi penggunaan harian tidak boleh bergantung pada internet aktif. Data lokal harus tetap realtime untuk user, lalu sync ke cloud saat koneksi tersedia.
 2. **Open Bill bukan prioritas v2.** Open Bill dipindahkan ke kandidat v2.1 setelah core flow stabil.
 3. **HPP/modal wajib ada di produk v2.** Namun field ini tidak boleh menghambat trial/onboarding. User boleh mengisi HPP belakangan setelah nyaman memakai app.
 4. **Target awal single-user.** Owner/staff dan permission dibahas untuk versi berikutnya.
-5. **Landing page publik akan dibuat terpisah.** Landing page juga diarahkan sebagai portal login ke dashboard desktop yang terintegrasi dengan akun Warungin.
+5. **Landing page publik dan desktop dashboard minimal masuk scope v2.** Landing page menjadi portal login desktop. Dashboard desktop v2 menampilkan laporan basic dan export Excel/PDF; fitur manajerial lanjutan tampil sebagai Coming Soon.
 6. **Struk wajib PNG.** WhatsApp text dipakai sebagai deskripsi singkat/fallback, tetapi struk visual PNG harus menjadi output utama share.
 7. **Demo/sample data wajib di onboarding.** User baru harus bisa eksplor fitur tanpa input data banyak. User login juga tetap bisa memakai data demo dan reset data saat siap mulai dari nol.
 8. **Pendekatan Play Store direkomendasikan Capacitor setelah web/PWA stabil.** TWA tetap dibandingkan di TRD, tetapi Capacitor lebih cocok untuk kebutuhan app shell stabil, offline/local sync, dan share file PNG.
 9. **Play Store submission setelah produk stabil.** Bukan target MVP v2 awal.
 10. **Google Play Console/package belum siap.** Akan dikerjakan setelah scope produk dan TRD lebih matang. Kandidat package bisa dievaluasi kemudian, misalnya `id.takisagency.warungin`.
+11. **Export PDF report-ready masuk scope v2.** PDF laporan harus berisi summary, visual/grafik ringkas jika tersedia, tabel pendukung, periode, timestamp export, dan identitas brand/store.
 
 ---
 
-## 17. Scope Recommendation — Locked v0.3
+## 17. Scope Recommendation — Locked v0.4
 
 Untuk rilis v2 yang realistis, rekomendasi scope adalah:
 
@@ -819,7 +828,8 @@ Untuk rilis v2 yang realistis, rekomendasi scope adalah:
 - Menu/stok solid
 - HPP/modal wajib secara data model, tetapi tidak menghambat trial/onboarding
 - Pengeluaran solid
-- Riwayat transaksi + export
+- Riwayat transaksi + export CSV/Excel
+- Export PDF report-ready untuk laporan dashboard
 - Receipt PNG + WhatsApp/share sheet
 - Onboarding dengan sample data dan mode eksplorasi
 
@@ -829,7 +839,7 @@ Untuk rilis v2 yang realistis, rekomendasi scope adalah:
 - Payment method lebih detail
 - PWA polish
 - Backup JSON
-- Landing page publik dan desktop dashboard portal awal jika MVP mobile sudah stabil
+- Landing page publik + desktop dashboard minimal: laporan basic, export Excel/PDF, dan Coming Soon nav
 
 ### v2.2+
 

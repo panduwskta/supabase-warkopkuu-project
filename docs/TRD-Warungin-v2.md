@@ -1,8 +1,8 @@
 # TRD — Warungin v2
 
-**Status:** Draft v0.2 — decisions 1–5 locked  
+**Status:** Draft v0.3 — sync/desktop/export decisions locked  
 **Product:** Warungin / Warungin POS  
-**Related PRD:** `docs/PRD-Warungin-v2.md` v0.3 — scope decisions locked  
+**Related PRD:** `docs/PRD-Warungin-v2.md` v0.4 — desktop/export decisions locked  
 **Previous baseline:** WarkopKuu v1  
 **Target:** Cloud-first, offline-capable, mobile-first POS for Indonesian UMKM  
 **Owner:** Pandu W Aji / Takis Agency
@@ -133,6 +133,7 @@ Recommended v2 stack:
 - html2canvas or modern DOM-to-image library for receipt PNG
 - Web Share API for sharing receipt PNG/text
 - Fallback download/copy text when Web Share is unavailable
+- Export libraries for Excel/PDF reports, candidates: SheetJS (`xlsx`) for Excel and `jspdf` + `jspdf-autotable` or server-rendered PDF later
 
 ### 4.2 Local Database
 
@@ -598,13 +599,19 @@ RPC responsibilities:
 - Decrement stock atomically.
 - Return transaction ID.
 
+Final MVP decision: use a **hybrid sync write strategy**.
+
+- Direct table operations are allowed for simple entities: products, categories, expenses, payment methods, settings, and demo/onboarding state.
+- RPC/server-side transaction is preferred for checkout because it must insert transaction data and update stock atomically.
+- This keeps day-to-day app development simpler while minimizing bugs in the most critical operational flow.
+
 MVP fallback if RPC is too heavy:
 
 - Insert transaction + items.
 - Update stock with guarded update.
 - If any update fails, mark sync conflict.
 
-But RPC is preferred for correctness.
+But RPC is preferred for checkout correctness.
 
 ### 8.6 Sync Status UI
 
@@ -755,29 +762,74 @@ Safety:
 
 ---
 
-## 12. Desktop Dashboard Foundation
+## 12. Desktop Dashboard Minimal
 
-Desktop dashboard is not MVP core implementation, but v2 schema must support it.
+Desktop dashboard v2 uses **Option B**: landing page + simple desktop login + basic reporting dashboard. It is not a full managerial dashboard yet.
 
-### 12.1 Dashboard Future Use Cases
+### 12.1 Dashboard v2 Use Cases
 
-- Update product/menu data from desktop.
-- Update stock more comfortably.
-- Add missed expenses/bookkeeping.
-- Review reports.
-- Export data.
+- User opens public landing page.
+- User logs in to desktop dashboard with the same Warungin account.
+- User views basic reports from cloud data:
+  - total sales
+  - transaction count
+  - total expenses
+  - estimated profit
+  - top products/menu
+  - period summary
+- User downloads reports as Excel and PDF.
+- Future managerial nav items may appear as **Coming Soon**.
 
-### 12.2 Technical Requirements
+### 12.2 Out of Scope for Desktop v2
+
+- Full stock management from desktop.
+- Full bookkeeping/editorial backfill flows.
+- Multi-user/staff management.
+- Advanced report builder.
+- Full CRUD for all operational data.
+
+These are planned for versions after the mobile app is stable.
+
+### 12.3 Technical Requirements
 
 - Same Supabase project and schema.
 - Same auth account.
 - Store-based ownership.
-- Realtime or near-realtime sync to mobile local DB.
-- Conflict handling for stock and product edits.
+- Desktop reads cloud data directly, while mobile remains local-first/offline-capable.
+- Realtime or near-realtime refresh can be used for desktop reports.
+- Desktop should not introduce write-conflict complexity in v2 because full managerial writes are out of scope.
 
-### 12.3 Recommendation
+### 12.4 Export Requirements
 
-Do not build full desktop dashboard inside MVP mobile sprint. Prepare schema and routes so future dashboard can share domain types and Supabase access.
+#### Excel Export
+
+- Export period-based report data as `.xlsx`.
+- Include summary sheet and detail sheets where useful.
+- Candidate library: SheetJS (`xlsx`).
+
+#### PDF Report Export
+
+PDF output must be report-ready, not raw table dump.
+
+Minimum PDF sections:
+
+- Warungin/store header.
+- Report title and selected period.
+- Export timestamp.
+- Summary cards: sales, transaction count, expenses, estimated profit.
+- Simple chart/visual snapshot if available.
+- Top products/menu table.
+- Transaction/expense summary table.
+- Footer/branding.
+
+Implementation candidates:
+
+- Client-side: `jspdf` + `jspdf-autotable`, optionally with chart canvas image snapshots.
+- Later/server-side: render PDF on backend/edge function if client-side PDF quality becomes limiting.
+
+### 12.5 Recommendation
+
+Build desktop dashboard minimal in v2 after mobile core is stable enough. Keep write-heavy desktop features as Coming Soon to avoid sync/conflict complexity.
 
 ---
 
@@ -906,7 +958,16 @@ MVP approach:
 - Build/lint cleanup.
 - Deployment checklist.
 
-### Phase 7 — Play Store Preparation Later
+### Phase 7 — Desktop Dashboard Minimal
+
+- Landing page public entry.
+- Desktop login using same Supabase auth.
+- Basic reporting dashboard.
+- Export Excel.
+- Export PDF report-ready.
+- Coming Soon nav for future managerial modules.
+
+### Phase 8 — Play Store Preparation Later
 
 - PWA manifest/service worker polish.
 - Capacitor wrapper.
@@ -1018,8 +1079,8 @@ Mitigation:
 3. Should receipt PNG be stored locally only or uploaded to Supabase Storage? **Answered:** store locally only in MVP; auto-delete after successful share when possible or after 14 days by default.
 4. What is the final receipt prefix: `WRG`, `WRN`, or another prefix? **Answered:** default `WRG`; user can customize prefix later from Settings using the same format.
 5. Should old WarkopKuu cloud data be auto-migrated or left as separate legacy data? **Answered:** keep old cloud data as separate legacy data; no auto-migration in MVP.
-6. Should cloud sync use direct table operations first, or RPC-first for all mutations? **Pending explanation/decision.**
-7. How much desktop dashboard foundation should be implemented in v2 vs only schema-ready? **Pending explanation/decision.**
+6. Should cloud sync use direct table operations first, or RPC-first for all mutations? **Answered:** hybrid strategy. Direct operations for simple entities; RPC/server-side transaction for checkout + stock updates.
+7. How much desktop dashboard foundation should be implemented in v2 vs only schema-ready? **Answered:** Option B. Build landing page + desktop login + basic reporting dashboard with Excel/PDF export and Coming Soon nav; no full managerial features yet.
 
 ---
 
@@ -1034,13 +1095,14 @@ For fastest safe path:
 5. Add v2 schema as new tables instead of mutating v1 tables heavily.
 6. Keep old WarkopKuu cloud data as separate legacy data; no auto-migration in MVP.
 7. Use local DB as UI source, not Supabase response directly.
-8. Start sync with simple queue and last-write-wins for non-stock entities, pending final answer for direct operations vs RPC-first.
-9. Use RPC/server-side transaction for checkout + stock update unless final sync strategy changes.
+8. Use hybrid cloud write strategy: direct operations for simple entities and RPC/server-side transaction for checkout + stock update.
+9. Start sync with simple queue and last-write-wins for non-stock entities.
 10. Keep Open Bill out of MVP v2.
 11. Generate receipt PNG locally only; do not upload to Supabase Storage in MVP.
 12. Auto-delete local receipt PNG after successful share when enabled, or after 14 days by default.
 13. Use receipt prefix `WRG` by default and allow optional customization in Settings with same format.
-14. Prepare for Capacitor after web/PWA core is stable.
+14. Build desktop dashboard minimal in v2: landing page, desktop login, basic reports, Excel/PDF export, Coming Soon nav.
+15. Prepare for Capacitor after web/PWA core is stable.
 
 ---
 
@@ -1054,4 +1116,5 @@ TRD is ready for implementation planning when:
 - Stock conflict rule is accepted.
 - Receipt PNG/share approach is accepted.
 - Android strategy direction is accepted.
+- Desktop minimal scope and Excel/PDF export approach are accepted.
 - Open technical questions are answered or assigned to implementation discovery.
