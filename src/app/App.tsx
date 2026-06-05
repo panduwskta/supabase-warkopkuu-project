@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { createRoot } from 'react-dom/client';
 import { createClient } from '@supabase/supabase-js';
 import {
   Coffee,
@@ -20,8 +19,6 @@ import {
   Package,
   WalletCards,
 } from 'lucide-react';
-import './styles.css';
-
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 const supabase = SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
@@ -529,4 +526,4 @@ function Pengeluaran({ expenses, expense, setExpense, addExpense, del }) { retur
 function OrderCard({ order }) { return <div className="order-card"><div><b>{receiptNo(order)}</b><small>{formatDate(order.timestamp)}</small><small>{order.items.map((i) => `${i.qty}x ${i.name}`).join(', ')}</small>{paidAmount(order) ? <small>Dibayar {formatRp(paidAmount(order))} · Kembali {formatRp(changeAmount(order))}</small> : null}</div><div className="order-total"><b>{formatRp(order.total)}</b><a className="share-link" href={`https://wa.me/?text=${encodeURIComponent(receiptText(order))}`} target="_blank" rel="noreferrer">Share</a></div></div>; }
 function Card({ title, children, action }) { return <div className="card"><div className="card-head"><h3>{title}</h3>{action}</div>{children}</div>; }
 function Empty({ text, action, onClick }) { return <div className="empty"><Coffee /><p>{text}</p>{action && <button onClick={onClick}>{action}</button>}</div>; }
-createRoot(document.getElementById('root')).render(<App />);
+export default App;
