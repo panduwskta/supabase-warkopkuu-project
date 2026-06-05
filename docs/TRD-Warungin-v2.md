@@ -1,6 +1,6 @@
 # TRD — Warungin v2
 
-**Status:** Draft v0.1  
+**Status:** Draft v0.2 — decisions 1–5 locked  
 **Product:** Warungin / Warungin POS  
 **Related PRD:** `docs/PRD-Warungin-v2.md` v0.3 — scope decisions locked  
 **Previous baseline:** WarkopKuu v1  
@@ -125,8 +125,8 @@ Future:
 Recommended v2 stack:
 
 - React + Vite
-- TypeScript recommended for v2 refactor
-- Tailwind CSS recommended for scalable mobile UI
+- TypeScript required for v2 refactor
+- Tailwind CSS + shadcn/ui required for scalable mobile UI
 - React Router for route separation
 - Dexie.js for IndexedDB local database
 - Supabase JS client
@@ -217,7 +217,7 @@ src/
     domain.ts
 ```
 
-If v2 does not immediately migrate to TypeScript, keep the same structure using `.jsx`, but TypeScript is recommended because sync logic and data models will become more complex.
+v2 should migrate to TypeScript immediately. This is required to make domain models, sync payloads, local DB schemas, and Supabase responses easier to validate and debug during vibecoding/development.
 
 ---
 
@@ -426,8 +426,10 @@ png_generated_at timestamptz
 
 MVP note:
 
-- Receipt PNG can be generated locally and not uploaded at first.
+- Receipt PNG should be generated and stored locally only by default.
+- Do not upload receipt PNG to Supabase Storage in MVP to avoid cloud storage cost/complexity.
 - `receipts` table can be optional in MVP if PNG is generated on demand from transaction detail.
+- Local receipt PNG should have retention policy: delete after successful share when possible, or auto-delete after 14 days.
 - If uploaded later, use Supabase Storage with RLS.
 
 #### `sync_events` — optional cloud audit
@@ -513,6 +515,9 @@ pngBlob?: Blob
 pngDataUrl?: string
 shareText: string
 generatedAt: string
+expiresAt?: string // default: generatedAt + 14 days
+sharedAt?: string
+autoDeleteAfterShare?: boolean
 ```
 
 ---
@@ -669,18 +674,36 @@ MVP recommendation: use `html2canvas` or `dom-to-image-more`, test on mobile bro
 1. Checkout completed locally.
 2. Receipt component renders hidden/visible preview.
 3. App generates PNG blob.
-4. App prepares share text:
+4. App stores PNG locally as temporary receipt asset.
+5. App prepares share text:
    - store name
    - receipt number
    - total
    - short thank you
-5. Use Web Share API with file if supported.
-6. Fallback:
+6. Use Web Share API with file if supported.
+7. If share succeeds and user enables auto-delete-after-share, delete temporary PNG asset.
+8. Fallback:
    - download PNG
    - copy WhatsApp text
    - open WhatsApp URL with text only
 
-### 10.3 Android/Capacitor Future
+### 10.3 Local Receipt Retention
+
+Receipt PNG storage policy for MVP:
+
+- Store receipt PNG locally only.
+- Default retention: auto-delete after 14 days.
+- Optional setting later: delete after successful share/send.
+- Receipt transaction data remains in database; only generated PNG asset is deleted.
+- User should still be able to regenerate receipt PNG from transaction detail after local PNG is deleted.
+
+Storage note:
+
+- Browser/Android WebView storage quota varies by device, browser, available disk, and engagement.
+- Do not assume a fixed 10 GB quota for all users.
+- Warungin should keep receipt PNG temporary and regeneratable, not as permanent source of truth.
+
+### 10.4 Android/Capacitor Future
 
 When wrapped with Capacitor:
 
@@ -805,13 +828,10 @@ Current v1 schema should not be deleted immediately.
 Recommended migration path:
 
 1. Add new v2 tables in new migration: `002_warungin_v2_schema.sql`.
-2. Keep old tables available during transition.
-3. Implement app v2 reading/writing new tables.
-4. Optional migration script to copy old v1 data:
-   - `menu_items` → `products` + categories
-   - `orders` JSONB → `transactions` + `transaction_items`
-   - `expenses` → `expenses` v2 + expense categories
-5. Validate migrated data per user.
+2. Keep old v1 tables available during transition as separate legacy data.
+3. Implement app v2 reading/writing new tables only.
+4. Do not auto-migrate old WarkopKuu cloud data in MVP.
+5. Optional legacy import/export can be considered later if needed.
 6. After stable release, decide whether to archive old tables.
 
 ### 14.2 Local Storage Migration
@@ -831,7 +851,7 @@ MVP approach:
 
 ### Phase 0 — Technical Preparation
 
-- Decide TypeScript migration or JS with structured modules.
+- Migrate v2 codebase to TypeScript with structured modules.
 - Add app folder structure.
 - Add local DB library.
 - Add Supabase v2 schema migration draft.
@@ -840,7 +860,7 @@ MVP approach:
 ### Phase 1 — Rebrand & Architecture Split
 
 - Rename UI copy WarkopKuu → Warungin.
-- Update receipt prefix from `WKK` to `WRG` or final prefix.
+- Update receipt prefix from `WKK` to default `WRG`, with optional custom prefix in Settings later.
 - Split `main.jsx` into feature modules/routes.
 - Introduce app providers.
 - Preserve current feature parity.
@@ -901,7 +921,7 @@ MVP approach:
 
 - `npm run build`
 - `npm run lint`
-- Typecheck if TypeScript is added.
+- Typecheck TypeScript.
 
 ### 16.2 Manual QA — Core Flow
 
@@ -993,13 +1013,13 @@ Mitigation:
 
 ## 18. Open Technical Questions
 
-1. Will v2 migrate to TypeScript immediately or stay JavaScript for speed?
-2. Should v2 use Tailwind/shadcn or continue custom CSS initially?
-3. Should receipt PNG be stored locally only or uploaded to Supabase Storage?
-4. What is the final receipt prefix: `WRG`, `WRN`, or another prefix?
-5. Should old WarkopKuu cloud data be auto-migrated or left as separate legacy data?
-6. Should cloud sync use direct table operations first, or RPC-first for all mutations?
-7. How much desktop dashboard foundation should be implemented in v2 vs only schema-ready?
+1. Will v2 migrate to TypeScript immediately or stay JavaScript for speed? **Answered:** migrate to TypeScript immediately.
+2. Should v2 use Tailwind/shadcn or continue custom CSS initially? **Answered:** use Tailwind CSS + shadcn/ui.
+3. Should receipt PNG be stored locally only or uploaded to Supabase Storage? **Answered:** store locally only in MVP; auto-delete after successful share when possible or after 14 days by default.
+4. What is the final receipt prefix: `WRG`, `WRN`, or another prefix? **Answered:** default `WRG`; user can customize prefix later from Settings using the same format.
+5. Should old WarkopKuu cloud data be auto-migrated or left as separate legacy data? **Answered:** keep old cloud data as separate legacy data; no auto-migration in MVP.
+6. Should cloud sync use direct table operations first, or RPC-first for all mutations? **Pending explanation/decision.**
+7. How much desktop dashboard foundation should be implemented in v2 vs only schema-ready? **Pending explanation/decision.**
 
 ---
 
@@ -1007,16 +1027,20 @@ Mitigation:
 
 For fastest safe path:
 
-1. Move v2 to TypeScript if possible.
-2. Use Dexie for IndexedDB.
-3. Use Supabase as cloud source of truth.
-4. Add v2 schema as new tables instead of mutating v1 tables heavily.
-5. Use local DB as UI source, not Supabase response directly.
-6. Start sync with simple queue and last-write-wins for non-stock entities.
-7. Use RPC/server-side transaction for checkout + stock update.
-8. Keep Open Bill out of MVP v2.
-9. Generate receipt PNG locally; upload later only if needed.
-10. Prepare for Capacitor after web/PWA core is stable.
+1. Move v2 to TypeScript immediately.
+2. Use Tailwind CSS + shadcn/ui for UI foundation.
+3. Use Dexie for IndexedDB.
+4. Use Supabase as cloud source of truth.
+5. Add v2 schema as new tables instead of mutating v1 tables heavily.
+6. Keep old WarkopKuu cloud data as separate legacy data; no auto-migration in MVP.
+7. Use local DB as UI source, not Supabase response directly.
+8. Start sync with simple queue and last-write-wins for non-stock entities, pending final answer for direct operations vs RPC-first.
+9. Use RPC/server-side transaction for checkout + stock update unless final sync strategy changes.
+10. Keep Open Bill out of MVP v2.
+11. Generate receipt PNG locally only; do not upload to Supabase Storage in MVP.
+12. Auto-delete local receipt PNG after successful share when enabled, or after 14 days by default.
+13. Use receipt prefix `WRG` by default and allow optional customization in Settings with same format.
+14. Prepare for Capacitor after web/PWA core is stable.
 
 ---
 
