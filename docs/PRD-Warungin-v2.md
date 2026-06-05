@@ -1,6 +1,6 @@
 # PRD — Warungin v2
 
-**Status:** Draft v0.2 — naming locked  
+**Status:** Draft v0.3 — scope decisions locked  
 **Product:** Warungin  
 **Product label:** Warungin POS  
 **Previous baseline:** WarkopKuu v1  
@@ -17,7 +17,9 @@ Warungin v2 adalah major update dari WarkopKuu v1 menjadi aplikasi kasir dan man
 
 Fokus utama v2 adalah mempertahankan kesederhanaan v1, tetapi memperkuat fondasi produk lewat rebrand, alur kasir yang lebih matang, manajemen operasional harian, dan laporan yang lebih berguna untuk pemilik usaha kecil.
 
-Warungin tidak perlu meniru KasirGratisan secara mentah. KasirGratisan menjadi benchmark fitur POS offline-first yang lengkap, sedangkan Warungin diarahkan sebagai aplikasi cloud-first yang ringan, mobile-first, dan mudah dipakai pemilik warung Indonesia.
+Warungin tidak perlu meniru KasirGratisan secara mentah. KasirGratisan menjadi benchmark fitur POS offline-first yang lengkap, sedangkan Warungin diarahkan sebagai aplikasi **cloud-first, offline-capable, mobile-first** yang ringan dan mudah dipakai pemilik warung Indonesia.
+
+Cloud-first berarti data utama tetap tersinkronisasi ke cloud agar bisa diakses lintas perangkat dan terintegrasi dengan dashboard desktop. Offline-capable berarti penggunaan harian tidak boleh berhenti saat internet tidak stabil: data yang sudah tersedia dan input baru harus tetap bisa dipakai secara lokal, lalu disinkronkan kembali ke cloud saat koneksi tersedia.
 
 ---
 
@@ -261,7 +263,66 @@ Kasir harus mendukung:
 - Supabase tetap menjadi sumber data utama.
 - Fallback lokal boleh tetap ada untuk demo jika env Supabase tidak tersedia.
 
-#### H. Play Store Readiness Foundation
+#### H. Cloud-First Offline-Capable Sync
+
+Warungin v2 harus cloud-first, tetapi penggunaan harian tidak boleh bergantung penuh pada koneksi internet aktif.
+
+Requirement awal:
+
+- Data yang sudah pernah dimuat harus tetap tersedia secara lokal saat internet tidak stabil atau offline.
+- Input operasional utama harus tetap bisa dilakukan secara lokal saat offline: transaksi, produk/stok dasar, dan pengeluaran.
+- UI lokal harus terasa realtime setelah user melakukan input, walaupun data belum tersinkron ke cloud.
+- App harus menampilkan status sync sederhana, misalnya tersimpan lokal / sedang sync / sudah sync / gagal sync.
+- Saat internet tersedia kembali, perubahan lokal harus otomatis di-sync ke cloud.
+- Conflict handling harus didefinisikan di TRD, terutama untuk stok dan transaksi.
+- Model ini harus mendukung integrasi lintas perangkat dan dashboard desktop di masa depan.
+
+#### I. HPP / Modal Produk
+
+HPP/modal wajib ada di data produk sejak v2 awal agar laporan laba bisa berkembang dengan benar.
+
+Namun HPP/modal tidak boleh menghambat user baru:
+
+- Field HPP/modal boleh kosong atau 0 saat onboarding/trial.
+- User tetap bisa membuat produk dan transaksi tanpa mengisi HPP.
+- UI harus memberi edukasi ringan bahwa pengisian HPP membuat estimasi laba lebih akurat.
+- User bisa melengkapi HPP setelah nyaman memakai app.
+
+#### J. Receipt PNG + WhatsApp Share
+
+Struk v2 harus mendukung format PNG.
+
+Requirement awal:
+
+- Setelah checkout, app menghasilkan tampilan struk yang bisa diekspor/share sebagai PNG.
+- Share ke WhatsApp atau app lain harus menyertakan PNG dan teks singkat sebagai deskripsi.
+- WhatsApp text tetap tersedia sebagai fallback jika share file tidak tersedia di environment tertentu.
+
+#### K. Demo/Sample Onboarding
+
+Onboarding harus membantu user mencoba app tanpa harus input banyak data terlebih dahulu.
+
+Requirement awal:
+
+- User bisa memilih tema/peruntukan usaha, misalnya warung, warkop, tempat makan, atau usaha kecil lainnya.
+- User bisa memilih langsung login/integrasi akun atau eksplorasi anonim dengan data sample.
+- User yang langsung login tetap bisa memakai data demo/sample.
+- Harus tersedia fitur reset data demo agar user bisa mulai input data sendiri.
+- Flow onboarding boleh mengambil inspirasi dari KasirGratisan, tetapi tetap disesuaikan dengan identitas Warungin.
+
+#### L. Landing Page & Desktop Dashboard Foundation
+
+Warungin akan memiliki landing page publik terpisah.
+
+Landing page ini nantinya juga menjadi portal masuk ke dashboard desktop yang terintegrasi dengan akun Warungin.
+
+Requirement awal:
+
+- Product architecture harus menyiapkan pemisahan mobile app dan desktop dashboard.
+- Data cloud harus bisa dipakai lintas device secara realtime/near-realtime.
+- Dashboard desktop diarahkan untuk kebutuhan manajerial: update stok, pembukuan tertinggal, review laporan, dan operasional yang lebih nyaman dari layar besar.
+
+#### M. Play Store Readiness Foundation
 
 Warungin v2 perlu disiapkan agar tidak menutup jalan menuju Google Play Store.
 
@@ -276,9 +337,9 @@ Requirement awal:
 
 ### 8.2 Should-Have
 
-#### A. Open Bill / Simpan Pesanan
+#### A. Open Bill / Simpan Pesanan — v2.1 Candidate
 
-Terinspirasi dari KasirGratisan.
+Terinspirasi dari KasirGratisan. Fitur ini belum menjadi prioritas MVP v2.
 
 Use case:
 
@@ -292,15 +353,7 @@ Fields kandidat:
 - Catatan pesanan opsional
 - Status: `open` / `completed` / `cancelled`
 
-#### B. HPP / Modal Produk Sederhana
-
-Agar laba lebih akurat:
-
-- Produk punya harga modal/HPP opsional
-- Laba transaksi dihitung dari harga jual - HPP
-- Jika HPP kosong, laba bisa dihitung sebagai pendapatan - pengeluaran saja atau diberi label estimasi
-
-#### C. Payment Method
+#### B. Payment Method
 
 - Cash
 - QRIS
@@ -309,14 +362,14 @@ Agar laba lebih akurat:
 
 Minimal v2 cukup selectable dan muncul di riwayat/struk.
 
-#### D. Backup/Export Data
+#### C. Backup/Export Data
 
 Karena Warungin cloud-first, backup JSON bukan prioritas utama, tetapi tetap berguna untuk trust.
 
 - Export transaksi/menu/pengeluaran ke CSV/JSON
 - Import belum wajib di v2 awal
 
-#### E. Better Empty States & Onboarding
+#### D. Better Empty States & Onboarding
 
 - First-run guide singkat
 - Contoh menu dummy opsional
@@ -363,12 +416,12 @@ KasirGratisan memberikan benchmark kuat untuk POS UMKM:
 - Kompleksitas permission di MVP awal
 - Semua master data sekaligus
 - Bluetooth print jika belum ada kebutuhan nyata
-- HPP weighted average penuh jika HPP sederhana sudah cukup
+- HPP weighted average penuh belum wajib jika HPP/modal sederhana sudah cukup untuk MVP v2
 
 ### Prinsip adaptasi
 
 KasirGratisan = lengkap dan offline-first.  
-Warungin = sederhana, cloud-first, mobile-first, lebih ringan untuk pemilik warung yang ingin data aman lintas perangkat.
+Warungin = sederhana, cloud-first, offline-capable, mobile-first, lebih ringan untuk pemilik warung yang ingin data aman lintas perangkat dan tetap bisa operasional saat internet tidak stabil.
 
 ---
 
@@ -377,10 +430,13 @@ Warungin = sederhana, cloud-first, mobile-first, lebih ringan untuk pemilik waru
 ### 10.1 First-Time User
 
 1. User membuka Warungin.
-2. User register/login.
-3. User mengisi nama warung.
-4. User menambahkan menu pertama atau memakai contoh menu.
-5. User diarahkan ke dashboard/kasir.
+2. User memilih tema/peruntukan usaha: warung, warkop, tempat makan, atau usaha kecil lainnya.
+3. User memilih salah satu jalur:
+   - login/register untuk sinkron cloud dan integrasi dashboard desktop, atau
+   - eksplorasi anonim dengan data sample.
+4. User mengisi nama warung jika memilih login/register.
+5. User bisa memakai data demo/sample terlebih dahulu atau mulai input data sendiri.
+6. User diarahkan ke dashboard/kasir.
 
 ### 10.2 Flow Transaksi Cepat
 
@@ -393,7 +449,8 @@ Warungin = sederhana, cloud-first, mobile-first, lebih ringan untuk pemilik waru
 7. Sistem hitung kembalian.
 8. Transaksi tersimpan.
 9. Stok berkurang otomatis.
-10. Struk bisa dibagikan via WhatsApp.
+10. Struk PNG dibuat.
+11. Struk bisa dibagikan ke WhatsApp atau app lain dengan teks singkat.
 
 ### 10.3 Flow Catat Pengeluaran
 
@@ -410,6 +467,23 @@ Warungin = sederhana, cloud-first, mobile-first, lebih ringan untuk pemilik waru
 3. Isi nama pelanggan/meja/catatan opsional.
 4. Bill muncul di daftar Open Bill.
 5. Saat pelanggan bayar, kasir buka bill dan checkout.
+
+### 10.5 Flow Offline / Internet Tidak Stabil
+
+1. User membuka app saat internet tidak stabil atau offline.
+2. Data terakhir yang sudah tersimpan lokal tetap tampil.
+3. User tetap bisa membuat transaksi, mengubah stok dasar, atau mencatat pengeluaran.
+4. App memberi status bahwa perubahan tersimpan lokal dan menunggu sync.
+5. Saat koneksi kembali tersedia, app melakukan sync otomatis ke cloud.
+6. App memberi status sync berhasil atau gagal dengan opsi retry.
+
+### 10.6 Flow Desktop Dashboard — Future Foundation
+
+1. User membuka landing page publik Warungin.
+2. User login ke dashboard desktop dengan akun yang sama.
+3. Dashboard desktop mengambil data cloud dari mobile app.
+4. User bisa melakukan pekerjaan manajerial dari desktop, seperti update stok, melengkapi pembukuan, dan review laporan.
+5. Perubahan dari desktop tersinkron kembali ke app mobile.
 
 ---
 
@@ -451,7 +525,8 @@ Entitas minimal v2:
 - name
 - price
 - stock
-- hpp/modal opsional
+- hpp/modal wajib secara schema, tetapi boleh kosong/0 saat onboarding atau masa trial
+- sample/demo flag opsional
 - is_active/is_deleted
 - created_at
 - updated_at
@@ -480,7 +555,7 @@ Entitas minimal v2:
 - product_name snapshot
 - qty
 - price snapshot
-- hpp snapshot opsional
+- hpp snapshot wajib secara schema, tetapi boleh bernilai 0 jika user belum mengisi modal
 - subtotal
 
 ### Expense
@@ -492,6 +567,40 @@ Entitas minimal v2:
 - date
 - notes
 - created_at
+
+### Local Sync Metadata
+
+Untuk mendukung cloud-first offline-capable, TRD perlu mendefinisikan metadata lokal minimal:
+
+- local_id
+- remote_id opsional
+- entity_type
+- operation: create/update/delete
+- payload snapshot
+- sync_status: pending/syncing/synced/failed/conflict
+- retry_count
+- last_error opsional
+- created_at
+- updated_at
+- synced_at opsional
+
+### Onboarding/Demo State
+
+- user/store id opsional
+- selected_business_type
+- selected_theme
+- demo_mode flag
+- demo_data_seeded flag
+- onboarding_completed flag
+
+### Receipt Asset
+
+- transaction_id
+- receipt_number
+- png/blob/file reference lokal
+- generated_at
+- share_text
+- sync/share status opsional
 
 ---
 
@@ -541,9 +650,25 @@ User harus bisa mencatat pengeluaran dan melihat dampaknya di dashboard.
 
 User harus bisa export data transaksi minimal CSV.
 
-### FR-012 Open Bill — Should-Have
+### FR-012 Offline-Capable Local Realtime
 
-User bisa menyimpan cart sebagai bill terbuka dan melanjutkan checkout nanti.
+User harus tetap bisa melihat data lokal dan membuat input operasional utama saat internet tidak stabil atau tidak tersedia. Data lokal harus tersinkronisasi kembali ke cloud saat koneksi tersedia.
+
+### FR-013 Receipt PNG + Share
+
+User harus bisa membuat struk dalam format PNG dan membagikannya ke WhatsApp atau aplikasi lain, dengan WhatsApp text sebagai deskripsi singkat.
+
+### FR-014 Demo/Sample Onboarding
+
+User baru harus bisa mencoba aplikasi dengan data sample saat onboarding, baik dalam mode login maupun mode eksplorasi anonim.
+
+### FR-015 Landing Page & Desktop Dashboard Foundation
+
+Warungin perlu disiapkan untuk memiliki landing page publik terpisah yang juga menjadi portal masuk ke dashboard desktop terintegrasi.
+
+### FR-016 Open Bill — Future/v2.1
+
+User bisa menyimpan cart sebagai bill terbuka dan melanjutkan checkout nanti. Fitur ini belum menjadi prioritas MVP v2.
 
 ---
 
@@ -560,6 +685,8 @@ User bisa menyimpan cart sebagai bill terbuka dan melanjutkan checkout nanti.
 - Transaksi tidak boleh tersimpan setengah jika stok gagal update.
 - Validasi stok harus mencegah penjualan melebihi stok.
 - Error dari Supabase harus ditampilkan dengan bahasa yang bisa dimengerti.
+- Operasional harian tidak boleh sepenuhnya bergantung pada koneksi internet aktif.
+- Data lokal dan cloud harus memiliki strategi sync yang jelas, termasuk queue perubahan lokal, status sync, retry, dan conflict handling.
 
 ### Security & Privacy
 
@@ -576,7 +703,10 @@ User bisa menyimpan cart sebagai bill terbuka dan melanjutkan checkout nanti.
 ### Android / Play Store Readiness
 
 - Produk harus bisa dikemas sebagai Android app tanpa mengubah core business logic secara besar.
-- Kandidat pendekatan teknis perlu dibandingkan di TRD: PWA installable, Trusted Web Activity (TWA), Capacitor, atau native rebuild di masa depan.
+- Rekomendasi pendekatan awal: **Capacitor wrapper** setelah web/PWA stabil, karena lebih fleksibel untuk app shell stabil di Play Store, local storage/sync, file sharing struk PNG, dan kemungkinan fitur native berikutnya.
+- TWA tetap bisa dipertimbangkan untuk distribusi paling ringan, tetapi kurang ideal jika Warungin ingin terasa seperti app utama yang stabil dan bisa berkembang dengan fitur native.
+- Native rebuild dari nol tidak direkomendasikan untuk tahap awal karena memperlambat validasi produk.
+- App Play Store stabil harus bisa tetap aktif digunakan normal saat tim mengembangkan update/beta di track atau channel terpisah.
 - App harus memiliki Privacy Policy publik sebelum Play Store submission.
 - Data Safety Form Google Play harus bisa dijawab dengan jelas berdasarkan data yang dikumpulkan: akun, email, data toko, produk, transaksi, pengeluaran.
 - Permission Android harus dijaga seminimal mungkin. Kamera/barcode, storage, Bluetooth print, atau notifikasi tidak boleh menjadi permission wajib jika fiturnya belum masuk scope.
@@ -605,6 +735,8 @@ User bisa menyimpan cart sebagai bill terbuka dan melanjutkan checkout nanti.
 - Lint tidak memiliki error kritis.
 - RLS Supabase lolos basic access test.
 - Tidak ada data bocor antar akun.
+- Input transaksi/pengeluaran dasar tetap bisa dibuat saat offline dan tersinkron saat koneksi kembali.
+- Status sync lokal/cloud bisa diverifikasi pada flow utama.
 
 ### UX Metrics
 
@@ -634,8 +766,10 @@ User bisa menyimpan cart sebagai bill terbuka dan melanjutkan checkout nanti.
 
 - Menu/stok lebih matang
 - Pengeluaran lebih rapi
-- HPP/modal sederhana
+- HPP/modal wajib di produk, tetapi tidak menghambat trial/onboarding
 - Export lebih jelas
+- Receipt PNG + WhatsApp/share sheet
+- Demo/sample data onboarding
 
 ### Phase 4 — Advanced Candidate
 
@@ -647,7 +781,8 @@ User bisa menyimpan cart sebagai bill terbuka dan melanjutkan checkout nanti.
 
 ### Phase 5 — Android / Play Store Candidate
 
-- Tentukan pendekatan distribusi Android: TWA/PWA wrapper, Capacitor, atau native rebuild future
+- Rekomendasi awal pendekatan distribusi Android: Capacitor wrapper setelah web/PWA stabil
+- TWA/PWA wrapper tetap menjadi opsi pembanding di TRD, tetapi bukan rekomendasi utama saat ini
 - Siapkan Privacy Policy dan halaman legal publik
 - Siapkan app icon, feature graphic, screenshot, short description, full description
 - Siapkan Google Play Console account, package name, signing key, internal testing track
@@ -656,35 +791,37 @@ User bisa menyimpan cart sebagai bill terbuka dan melanjutkan checkout nanti.
 
 ---
 
-## 16. Open Questions
+## 16. Product Decisions — Locked v0.3
 
-1. Apakah Warungin v2 tetap pure cloud-first, atau perlu offline-first/PWA sebagai requirement utama?
-2. Apakah Open Bill masuk MVP v2 atau v2.1?
-3. Apakah HPP/modal wajib di produk sejak v2 awal?
-4. Apakah target awal single-user dulu atau langsung owner/staff?
-5. Apakah Warungin akan punya landing page publik terpisah?
-6. Apakah struk perlu format PNG/download, atau WhatsApp text dulu cukup?
-7. Apakah data demo/sample menu perlu disediakan saat onboarding?
-8. Apakah target Play Store memakai pendekatan PWA/TWA, Capacitor wrapper, atau native app di fase berikutnya?
-9. Apakah Play Store submission ditargetkan untuk v2 awal, v2.1, atau setelah produk web stabil?
-10. Apakah kita sudah punya Google Play Console developer account dan nama package kandidat, misalnya `id.takisagency.warungin`?
+1. **Cloud-first, offline-capable.** Warungin tetap cloud-first, tetapi penggunaan harian tidak boleh bergantung pada internet aktif. Data lokal harus tetap realtime untuk user, lalu sync ke cloud saat koneksi tersedia.
+2. **Open Bill bukan prioritas v2.** Open Bill dipindahkan ke kandidat v2.1 setelah core flow stabil.
+3. **HPP/modal wajib ada di produk v2.** Namun field ini tidak boleh menghambat trial/onboarding. User boleh mengisi HPP belakangan setelah nyaman memakai app.
+4. **Target awal single-user.** Owner/staff dan permission dibahas untuk versi berikutnya.
+5. **Landing page publik akan dibuat terpisah.** Landing page juga diarahkan sebagai portal login ke dashboard desktop yang terintegrasi dengan akun Warungin.
+6. **Struk wajib PNG.** WhatsApp text dipakai sebagai deskripsi singkat/fallback, tetapi struk visual PNG harus menjadi output utama share.
+7. **Demo/sample data wajib di onboarding.** User baru harus bisa eksplor fitur tanpa input data banyak. User login juga tetap bisa memakai data demo dan reset data saat siap mulai dari nol.
+8. **Pendekatan Play Store direkomendasikan Capacitor setelah web/PWA stabil.** TWA tetap dibandingkan di TRD, tetapi Capacitor lebih cocok untuk kebutuhan app shell stabil, offline/local sync, dan share file PNG.
+9. **Play Store submission setelah produk stabil.** Bukan target MVP v2 awal.
+10. **Google Play Console/package belum siap.** Akan dikerjakan setelah scope produk dan TRD lebih matang. Kandidat package bisa dievaluasi kemudian, misalnya `id.takisagency.warungin`.
 
 ---
 
-## 17. Recommendation Awal
+## 17. Scope Recommendation — Locked v0.3
 
 Untuk rilis v2 yang realistis, rekomendasi scope adalah:
 
 ### MVP v2
 
 - Rebrand total ke Warungin
+- Cloud-first dengan offline-capable local realtime dan sync ke cloud
 - Dashboard lebih matang
 - Kasir/cart/checkout lebih rapi
 - Menu/stok solid
+- HPP/modal wajib secara data model, tetapi tidak menghambat trial/onboarding
 - Pengeluaran solid
 - Riwayat transaksi + export
-- Receipt/share WhatsApp
-- HPP sederhana opsional
+- Receipt PNG + WhatsApp/share sheet
+- Onboarding dengan sample data dan mode eksplorasi
 
 ### v2.1
 
@@ -692,6 +829,7 @@ Untuk rilis v2 yang realistis, rekomendasi scope adalah:
 - Payment method lebih detail
 - PWA polish
 - Backup JSON
+- Landing page publik dan desktop dashboard portal awal jika MVP mobile sudah stabil
 
 ### v2.2+
 
@@ -704,9 +842,12 @@ Untuk rilis v2 yang realistis, rekomendasi scope adalah:
 
 ### Android / Play Store Track
 
-- Rekomendasi awal: stabilkan Warungin sebagai web/PWA mobile-first dulu, lalu bungkus ke Android memakai TWA atau Capacitor setelah flow core terbukti stabil.
+- Rekomendasi awal: stabilkan Warungin sebagai web/PWA mobile-first dulu, lalu bungkus ke Android memakai **Capacitor** setelah flow core terbukti stabil.
+- TWA tetap dievaluasi di TRD, tetapi Capacitor lebih direkomendasikan karena memberi kontrol app shell, local/offline storage, file sharing, dan peluang native capability yang lebih baik.
 - Jangan rebuild native dari nol untuk tahap awal karena akan memperlambat validasi produk.
-- Play Store readiness mulai disiapkan sejak PRD/TRD: privacy policy, data safety, app assets, dan package/signing plan.
+- Play Store submission dilakukan setelah produk stabil.
+- App stabil di Play Store harus dipisahkan dari update/beta development melalui release track yang aman.
+- Play Store readiness mulai disiapkan sejak PRD/TRD: privacy policy, data safety, app assets, package name, signing key, dan Google Play Console account.
 
 ---
 
@@ -715,7 +856,8 @@ Untuk rilis v2 yang realistis, rekomendasi scope adalah:
 PRD ini dianggap siap lanjut ke TRD jika:
 
 - Scope MVP v2 disetujui.
-- Open questions utama sudah dijawab.
+- Product decisions utama sudah dikunci.
 - Must-have vs should-have sudah dikunci.
-- Data requirement sudah cukup untuk diturunkan menjadi schema Supabase.
+- Data requirement sudah cukup untuk diturunkan menjadi schema Supabase dan local/offline sync model.
 - User flow utama sudah disepakati.
+- Android/Play Store direction sudah cukup jelas untuk diturunkan ke TRD.
