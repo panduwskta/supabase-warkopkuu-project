@@ -1,11 +1,11 @@
 # SRS — Warungin v2
 
 **Document:** Software Requirements Specification / System Requirements Document  
-**Status:** Draft v0.1  
+**Status:** Draft v0.2 — English-first baseline  
 **Product:** Warungin / Warungin POS  
-**Related PRD:** `docs/PRD-Warungin-v2.md` v0.4 — desktop/export decisions locked  
-**Related TRD:** `docs/TRD-Warungin-v2.md` v0.3 — sync/desktop/export decisions locked  
-**Related DOR:** `docs/SRD-Warungin-v2.md` — development operating rules  
+**Related PRD:** `docs/PRD-Warungin-v2.md` v0.5  
+**Related TRD:** `docs/TRD-Warungin-v2.md` v0.4  
+**Related DOR:** `docs/SRD-Warungin-v2.md`  
 **Owner:** Pandu W Aji / Takis Agency
 
 ---
@@ -14,50 +14,49 @@
 
 ### 1.1 Purpose
 
-Dokumen SRS ini mendefinisikan spesifikasi kebutuhan sistem Warungin v2 secara menyeluruh, formal, dan dapat dijadikan acuan pengembangan, review, testing, serta validasi.
+This SRS defines the functional and non-functional requirements for Warungin v2. It specifies how the system should behave, respond, perform, protect data, handle offline usage, support reporting, and be validated.
 
-SRS menjembatani PRD dan TRD:
+This document bridges product and technical planning:
 
-- PRD menjelaskan kebutuhan produk dan alasan bisnis/user.
-- SRS menjelaskan persyaratan sistem secara fungsional dan non-fungsional.
-- TRD menjelaskan pendekatan teknis/arsitektur untuk memenuhi SRS.
-- DOR/SRD lama menjelaskan aturan development, sprint, approval, dan verification workflow.
+- PRD defines product intent and business/user needs.
+- SRS defines system requirements in a formal, testable way.
+- TRD defines the technical architecture and implementation approach.
+- DOR/SRD defines development operating rules, sprint discipline, approval gates, and verification workflow.
 
-### 1.2 Product Scope
+### 1.2 Scope
 
-Warungin v2 adalah aplikasi kasir dan manajemen warung/kedai/warkop/UMKM Indonesia yang:
+Warungin v2 is a cloud-first, offline-capable, mobile-first POS and operations system for Indonesian UMKM businesses such as warung, kedai, warkop, food stalls, and small shops.
 
-- cloud-first,
-- offline-capable,
-- mobile-first,
-- single-user untuk MVP,
-- mendukung dashboard desktop minimal,
-- mendukung export Excel/PDF report-ready,
-- siap diarahkan ke Play Store setelah stabil.
+MVP v2 includes:
+
+- account and store setup,
+- onboarding and demo/sample data,
+- product/menu and HPP/modal management,
+- cashier checkout,
+- stock deduction,
+- transactions and expenses,
+- local-first offline-capable operations,
+- cloud sync,
+- receipt PNG sharing,
+- CSV/Excel export,
+- report-ready PDF export,
+- mobile dashboard,
+- minimal desktop dashboard.
 
 ### 1.3 Definitions
 
 | Term | Definition |
 |---|---|
-| Warungin | Nama produk final v2 |
-| Warungin POS | Product label untuk konteks POS/marketplace |
-| MVP | Minimum Viable Product, versi minimum yang sudah berguna dan bisa divalidasi |
-| Cloud-first | Cloud/Supabase menjadi sumber data utama untuk akun login |
-| Offline-capable | App tetap bisa dipakai untuk operasional dasar saat internet tidak stabil/offline |
-| Local DB | Database lokal di device, kandidat IndexedDB/Dexie |
-| Sync Queue | Antrian perubahan lokal yang belum tersinkron ke cloud |
-| RPC | Function di Supabase/Postgres untuk operasi server-side, terutama checkout + stok |
-| RLS | Row Level Security Supabase/Postgres |
-| Desktop Dashboard Minimal | Dashboard desktop v2 untuk laporan basic dan export, bukan full manajerial |
-| Report-ready PDF | PDF laporan yang sudah rapi untuk dibaca/dibagikan, bukan dump data mentah |
-
-### 1.4 References
-
-- `docs/PRD-Warungin-v2.md`
-- `docs/TRD-Warungin-v2.md`
-- `docs/SRD-Warungin-v2.md`
-- Benchmark repo: `panduwskta/kasirgratisan`
-- Existing repo: `panduwskta/supabase-warkopkuu-project`
+| MVP | Minimum Viable Product: the smallest useful version that can be validated by real users |
+| Cloud-first | Cloud/Supabase is the source of truth for logged-in users after sync |
+| Offline-capable | The system remains usable for core operations without active internet |
+| Local DB | Local device database, implemented with IndexedDB/Dexie |
+| Sync Queue | Local queue for mutations waiting to be synced to cloud |
+| RPC | Server-side database function, used for atomic checkout + stock update |
+| RLS | Row Level Security, used to isolate user/store data in Supabase |
+| HPP/Modal | Product cost used for profit estimation |
+| Report-ready PDF | A formatted, readable PDF report with summary, period, tables, and optional visuals |
+| Desktop Dashboard Minimal | Basic desktop reporting dashboard, not full managerial CRUD |
 
 ---
 
@@ -65,177 +64,125 @@ Warungin v2 adalah aplikasi kasir dan manajemen warung/kedai/warkop/UMKM Indones
 
 ### 2.1 Product Perspective
 
-Warungin v2 merupakan major update dari WarkopKuu v1. Sistem ini tidak hanya mengganti brand, tetapi memperbarui fondasi aplikasi agar lebih siap menjadi produk jangka panjang.
+Warungin v2 is a major upgrade from WarkopKuu v1. It transforms the app from a simple cloud POS into a more structured product with offline-capable operations, stronger data model, reporting, and future readiness for desktop and Android distribution.
 
-Current v1 memiliki fitur kasir/menu/stok/transaksi/pengeluaran/dashboard dasar. v2 akan memperluas dan merapikan sistem agar:
+### 2.2 Product Functions
 
-- data lebih terstruktur,
-- bisa berjalan saat internet tidak stabil,
-- dapat sinkron ke cloud,
-- dapat dipakai lintas perangkat,
-- siap punya dashboard desktop,
-- siap dibungkus menjadi Android app via Capacitor di fase setelah stabil.
+The system shall provide:
 
-### 2.2 Product Functions Summary
-
-Warungin v2 harus menyediakan:
-
-- autentikasi akun,
-- onboarding dan sample/demo data,
-- manajemen toko/store dasar,
-- manajemen kategori,
-- manajemen produk/menu,
-- HPP/modal produk,
-- stok dasar,
-- kasir/cart/checkout,
-- transaksi dan transaction items,
-- pengeluaran,
-- dashboard mobile,
-- receipt PNG dan share,
-- export CSV/Excel,
-- export PDF report-ready,
+- authentication,
+- store setup,
+- onboarding/demo mode,
+- product/menu management,
+- category management,
+- HPP/modal field,
+- stock tracking,
+- cashier/cart/checkout,
+- transaction history,
+- expense tracking,
+- dashboard metrics,
+- receipt PNG generation and sharing,
 - offline-capable local operations,
-- cloud sync,
-- desktop dashboard minimal,
-- settings dasar.
+- cloud synchronization,
+- Excel/PDF reporting,
+- minimal desktop dashboard,
+- settings and demo reset.
 
 ### 2.3 User Classes
 
-#### UC-01 Owner / Pemilik Warung
+#### UC-01 — Owner / Business Operator
 
-Primary user untuk MVP v2.
+Primary MVP user. Uses Warungin from mobile for daily operations and desktop for basic reporting/export.
 
-Kebutuhan:
+#### UC-02 — Cashier/Staff
 
-- login/register,
-- setup toko,
-- input menu/produk,
-- transaksi harian,
-- pengeluaran,
-- lihat dashboard,
-- export laporan,
-- share struk,
-- tetap operasional saat internet tidak stabil.
+Future user class. Staff roles and permissions are out of scope for MVP v2.
 
-#### UC-02 Kasir/Staf — Future
+#### UC-03 — Desktop User
 
-Belum menjadi target MVP v2. Akan dibahas untuk versi setelah single-user stabil.
-
-#### UC-03 Desktop User / Owner di Desktop
-
-User yang sama dengan owner, tetapi mengakses dashboard desktop minimal dari landing page.
-
-Kebutuhan v2:
-
-- login desktop,
-- lihat laporan basic,
-- export Excel/PDF,
-- melihat nav fitur lanjutan sebagai Coming Soon.
+The same owner account using a desktop browser to view basic reports and export Excel/PDF.
 
 ### 2.4 Operating Environment
 
-MVP v2 harus berjalan pada:
-
-- Mobile browser modern Android/iOS.
-- Desktop browser modern untuk dashboard minimal.
-- Vercel/static hosting untuk frontend.
-- Supabase untuk auth/database.
-- Local IndexedDB untuk offline-capable storage.
-
-Future:
-
-- Android app via Capacitor wrapper.
+- Mobile browsers on modern Android/iOS.
+- Desktop browsers for minimal dashboard.
+- Supabase Auth/Postgres for cloud backend.
+- IndexedDB/Dexie for local operational data.
+- Vercel/static hosting candidate for web frontend.
+- Future Android runtime via Capacitor.
 
 ### 2.5 Constraints
 
-- MVP v2 single-user dulu.
-- Open Bill tidak masuk MVP v2.
-- Multi-user/staff tidak masuk MVP v2.
-- Barcode tidak masuk MVP v2.
-- Supplier/stock movement advanced tidak masuk MVP v2.
-- Payment gateway tidak masuk MVP v2.
-- Native Android rebuild dari nol tidak dilakukan di MVP.
-- Receipt PNG tidak diupload ke cloud di MVP.
-- Old WarkopKuu cloud data tidak auto-migrate di MVP.
+- MVP is single-user only.
+- Open Bill is out of scope.
+- Multi-user/staff is out of scope.
+- Barcode scanning is out of scope.
+- Payment gateway is out of scope.
+- Bluetooth printing is out of scope.
+- Native Android rebuild is out of scope.
+- Receipt PNG is not uploaded to cloud in MVP.
+- Old WarkopKuu cloud data remains legacy and is not auto-migrated in MVP.
 
 ### 2.6 Assumptions
 
-- User login memakai Supabase Auth.
-- User utama memakai HP untuk operasional harian.
-- Internet user bisa tidak stabil.
-- User bisa mulai dengan data sample.
-- HPP/modal penting untuk laporan laba, tetapi user boleh mengisinya belakangan.
-- Desktop dashboard v2 hanya untuk laporan basic dan export, bukan operasi manajerial penuh.
-
-### 2.7 Dependencies
-
-- Supabase Auth.
-- Supabase Postgres + RLS.
-- IndexedDB/Dexie.
-- React/Vite/TypeScript.
-- Tailwind/shadcn.
-- Export libraries untuk Excel/PDF sesuai TRD.
-- Browser Web Share API untuk sharing jika tersedia.
+- Users may experience unstable internet.
+- Users prefer mobile-first operations.
+- Users need simple business language, not complex accounting terminology.
+- HPP/modal improves reporting but should not block trial/onboarding.
+- Desktop dashboard is initially for reporting/export, not full management.
 
 ---
 
-## 3. System Features & Functional Requirements
+## 3. Functional Requirements
 
-Functional requirement format:
+Each requirement includes priority and acceptance criteria.
 
-- **Priority:** Must / Should / Could / Future
-- **Source:** PRD/TRD decision reference
-- **Acceptance:** high-level acceptance criteria
+### 3.1 Authentication & Store Ownership
 
----
-
-### 3.1 Authentication & Account
-
-#### FR-AUTH-001 — Register Account
+#### FR-AUTH-001 — User Registration
 
 **Priority:** Must
 
-System shall allow user to register an account using email/password or supported Supabase Auth method.
+The system shall allow a user to register an account.
 
 Acceptance:
 
-- User can create account.
-- User session is established or user is instructed to verify email if required.
-- Errors are shown in simple Indonesian copy.
+- User can create an account.
+- Registration errors are displayed clearly.
+- Cloud data is associated with the authenticated user.
 
-#### FR-AUTH-002 — Login Account
+#### FR-AUTH-002 — User Login
 
 **Priority:** Must
 
-System shall allow registered user to login.
+The system shall allow a registered user to log in.
 
 Acceptance:
 
-- User can login successfully.
-- User sees only their own store/data.
-- Invalid credentials show clear error.
+- User can access their own store data.
+- User cannot access another user’s store data.
 
 #### FR-AUTH-003 — Logout
 
 **Priority:** Must
 
-System shall allow user to logout.
+The system shall allow a user to log out.
 
 Acceptance:
 
 - Session is cleared.
-- Protected app area is no longer accessible until login.
+- Protected screens require login again.
 
 #### FR-AUTH-004 — Single-User Store Ownership
 
 **Priority:** Must
 
-System shall associate user with one primary store for MVP v2.
+The system shall associate the MVP account with one primary store.
 
 Acceptance:
 
-- Store data belongs to logged-in owner.
-- RLS prevents cross-user access.
+- Store rows are owned by the logged-in user.
+- RLS enforces ownership.
 
 ---
 
@@ -245,721 +192,540 @@ Acceptance:
 
 **Priority:** Must
 
-System shall allow new user to choose business type such as warung, warkop, tempat makan, toko kecil, or lainnya.
+The system shall allow the user to select a business type.
 
 Acceptance:
 
-- Selection is saved locally and/or cloud depending on user mode.
-- Selection can influence sample data/theme.
+- Supported options include warung, warkop, food stall, small shop, and other.
+- Selection is saved in onboarding/store state.
 
-#### FR-ONB-002 — Theme Selection
+#### FR-ONB-002 — Theme/Preference Selection
 
 **Priority:** Must
 
-System shall provide simple theme preference during onboarding.
+The system shall allow basic theme/preference selection during onboarding.
 
 Acceptance:
 
-- User can select visual/theme preference.
-- Theme is applied or stored for later use.
+- Selection is stored.
+- Selection can influence UI/sample data.
 
-#### FR-ONB-003 — Explore Anonymous with Sample Data
+#### FR-ONB-003 — Anonymous Exploration
 
 **Priority:** Must
 
-System shall allow user to explore app without immediate login using local sample data.
+The system shall allow users to explore the app locally without immediate login.
 
 Acceptance:
 
-- User can enter app without account.
-- Sample data appears.
-- No cloud sync happens until login/register.
+- User can access sample data without account.
+- No cloud sync occurs before login/register.
 
-#### FR-ONB-004 — Logged-In User Can Use Sample Data
+#### FR-ONB-004 — Demo Data for Logged-In Users
 
 **Priority:** Must
 
-System shall allow logged-in user to start with sample data.
+The system shall allow logged-in users to start with sample data.
 
 Acceptance:
 
-- Logged-in user can see seeded demo products/categories/expenses/transactions.
 - Demo rows are marked as sample data.
+- Demo data can be reset safely.
 
 #### FR-ONB-005 — Reset Demo Data
 
 **Priority:** Must
 
-System shall provide reset demo data action.
+The system shall provide a reset demo data action.
 
 Acceptance:
 
-- User can remove sample data.
-- Confirmation appears before reset.
-- Non-sample production data is not accidentally removed unless user explicitly chooses full reset.
+- Confirmation is required.
+- Sample data can be removed without deleting real data unintentionally.
 
 ---
 
-### 3.3 Store Settings
-
-#### FR-STORE-001 — Store Profile
-
-**Priority:** Must
-
-System shall allow user to set store name and optional store information.
-
-Acceptance:
-
-- Store name appears in dashboard and receipt.
-- Store phone/address/footer can be optional.
-
-#### FR-STORE-002 — Receipt Prefix Default
-
-**Priority:** Must
-
-System shall use default receipt prefix `WRG`.
-
-Acceptance:
-
-- New receipt numbers start with `WRG` by default.
-
-#### FR-STORE-003 — Receipt Prefix Customization
-
-**Priority:** Should
-
-System shall allow user to customize receipt prefix from Settings using the same format.
-
-Acceptance:
-
-- User can update prefix.
-- Future receipt numbers use new prefix.
-- Existing receipt numbers remain unchanged.
-
----
-
-### 3.4 Product/Menu & Category
+### 3.3 Product, Category, HPP, and Stock
 
 #### FR-PROD-001 — Create Product/Menu
 
 **Priority:** Must
 
-System shall allow user to create product/menu item.
-
-Required data:
-
-- name,
-- category optional/default,
-- selling price,
-- stock,
-- HPP/modal default 0 or empty-friendly.
+The system shall allow users to create products/menu items.
 
 Acceptance:
 
+- Product has name, price, stock, category, and HPP/modal field.
 - Product appears in product list and cashier.
-- Product can be used in transaction if active and stock available.
 
 #### FR-PROD-002 — HPP/Modal Field
 
 **Priority:** Must
 
-System shall include HPP/modal in product data model.
+The system shall include HPP/modal in the product data model.
 
 Acceptance:
 
-- HPP field exists.
-- HPP default does not block product creation.
-- UI explains that HPP improves profit accuracy.
+- HPP defaults to 0 or empty-friendly value.
+- Product creation is not blocked if user does not know HPP yet.
+- Profit estimate can use HPP when available.
 
 #### FR-PROD-003 — Update Product/Menu
 
 **Priority:** Must
 
-System shall allow user to edit product/menu basic fields.
+The system shall allow editing product data.
 
 Acceptance:
 
-- Changes update locally immediately.
-- Changes sync to cloud when online.
+- Local UI updates immediately.
+- Update is queued for sync when needed.
 
-#### FR-PROD-004 — Soft Delete Product/Menu
+#### FR-PROD-004 — Soft Delete / Deactivate Product
 
 **Priority:** Must
 
-System shall allow product/menu to be deleted or deactivated without breaking old transaction history.
+The system shall allow products to be removed from active use without breaking historical transaction records.
 
 Acceptance:
 
-- Deleted product no longer appears in cashier.
-- Old transaction item snapshots remain readable.
+- Deleted/deactivated product does not appear in cashier.
+- Historical transaction item snapshots remain readable.
 
-#### FR-PROD-005 — Category Management Basic
+#### FR-PROD-005 — Category Management
 
 **Priority:** Must
 
-System shall support basic product categories.
+The system shall support basic categories.
 
 Acceptance:
 
-- User can group products.
-- Cashier can filter/search by category.
+- Products can be grouped.
+- Cashier can filter by category.
 
-#### FR-PROD-006 — Stock Basic
+#### FR-PROD-006 — Stock Tracking
 
 **Priority:** Must
 
-System shall maintain product stock count.
+The system shall track product stock.
 
 Acceptance:
 
-- Stock can be set/edited.
-- Checkout reduces stock locally.
-- Cloud checkout sync validates/updates stock.
+- Stock can be updated.
+- Checkout reduces local stock.
+- Cloud checkout validates/updates stock through RPC/server-side transaction.
 
 ---
 
-### 3.5 Cashier / POS
+### 3.4 Cashier / POS
 
-#### FR-POS-001 — Product Search & Selection
+#### FR-POS-001 — Product Search and Selection
 
 **Priority:** Must
 
-System shall allow user to search and select products in cashier.
+The system shall allow product search and selection from cashier.
 
 Acceptance:
 
-- Product search works by name.
+- Search works by product name.
 - Category filter is available.
-- Out-of-stock product cannot be sold unless rules later allow it.
+- User can add product to cart.
 
 #### FR-POS-002 — Cart Management
 
 **Priority:** Must
 
-System shall allow adding/removing products and changing quantity in cart.
+The system shall allow cart item quantity adjustment and removal.
 
 Acceptance:
 
 - Cart total updates immediately.
-- Quantity cannot exceed available stock locally.
+- Quantity cannot exceed available local stock.
 
 #### FR-POS-003 — Checkout
 
 **Priority:** Must
 
-System shall allow user to checkout cart into completed transaction.
+The system shall convert a cart into a completed transaction.
 
 Acceptance:
 
-- Transaction is created locally.
-- Transaction items are saved.
-- Stock decreases locally.
-- Sync queue is created if cloud sync pending.
+- Transaction and items are created locally.
+- Stock is deducted locally.
+- Sync queue entry is created.
 
-#### FR-POS-004 — Payment Amount & Change
+#### FR-POS-004 — Payment and Change
 
 **Priority:** Must
 
-System shall support payment amount input and change calculation for cash.
+The system shall support payment amount input and change calculation.
 
 Acceptance:
 
-- User inputs paid amount.
+- Payment amount is saved.
 - Change is calculated correctly.
-- Payment data appears in transaction and receipt.
 
 #### FR-POS-005 — Payment Method
 
 **Priority:** Must
 
-System shall support basic payment methods: cash, QRIS, transfer, e-wallet.
+The system shall support basic payment methods.
 
 Acceptance:
 
-- User can select payment method.
-- Selected method appears in transaction history/receipt.
+- Supported methods: Cash, QRIS, Transfer, E-wallet.
+- Payment method is visible in transaction detail and receipt.
 
 #### FR-POS-006 — Atomic Cloud Checkout
 
 **Priority:** Must
 
-System shall sync checkout using RPC/server-side transaction for transaction insert + stock update.
+The system shall use RPC/server-side transaction for checkout sync.
 
 Acceptance:
 
-- Checkout sync does not leave cloud in half-saved state.
+- Cloud transaction and stock update do not partially save.
 - Unauthorized store checkout is rejected.
-- Insufficient cloud stock is marked as conflict.
+- Insufficient stock creates conflict state.
 
 ---
 
-### 3.6 Transactions & History
+### 3.5 Transactions
 
-#### FR-TX-001 — Transaction List
+#### FR-TX-001 — Transaction History
 
 **Priority:** Must
 
-System shall show transaction history.
+The system shall display transaction history.
 
 Acceptance:
 
-- User can see recent transactions.
-- User can filter by period/search basic.
+- User can view recent transactions.
+- User can filter/search basic transaction data.
 
 #### FR-TX-002 — Transaction Detail
 
 **Priority:** Must
 
-System shall show transaction details including items, payment, total, receipt number, and profit estimate.
+The system shall show transaction detail.
 
 Acceptance:
 
-- Item snapshots remain visible even if product is deleted.
+- Detail includes receipt number, date, items, payment, total, and profit estimate.
 
-#### FR-TX-003 — Export Transaction Data
+#### FR-TX-003 — Export Transactions
 
 **Priority:** Must
 
-System shall export transaction data to CSV/Excel.
+The system shall export transactions to CSV/Excel.
 
 Acceptance:
 
-- User can export selected period.
-- File contains transaction summary and/or details.
+- Export respects selected period.
+- Export file can be opened in spreadsheet tools.
 
-#### FR-TX-004 — Transaction Status
+#### FR-TX-004 — Completed Transaction Protection
 
 **Priority:** Must
 
-System shall support completed transactions in MVP.
+The system shall protect completed transaction integrity.
 
 Acceptance:
 
-- Completed transaction is immutable enough to protect stock consistency.
-- Cancel/delete behavior, if present, must be explicit and safe.
-
-#### FR-TX-005 — Open Bill
-
-**Priority:** Future / v2.1 Candidate
-
-Open Bill is not MVP v2.
-
-Acceptance:
-
-- No Open Bill implementation required in MVP.
+- Completed transactions are not casually edited in a way that breaks stock consistency.
 
 ---
 
-### 3.7 Expenses
+### 3.6 Expenses
 
 #### FR-EXP-001 — Create Expense
 
 **Priority:** Must
 
-System shall allow user to record expense.
+The system shall allow users to record expenses.
 
 Acceptance:
 
-- Expense has title/category/name, amount, date, notes optional.
-- Expense appears in dashboard totals.
+- Expense has title/category, amount, date, and optional notes.
+- Expense appears in dashboard calculations.
 
 #### FR-EXP-002 — Expense List
 
 **Priority:** Must
 
-System shall show expense history.
+The system shall display expense history.
 
 Acceptance:
 
 - User can view expenses by date/period.
 
-#### FR-EXP-003 — Expense Sync
+#### FR-EXP-003 — Offline Expense Sync
 
 **Priority:** Must
 
-System shall save expenses locally first and sync to cloud.
+The system shall allow expense creation while offline and sync later.
 
 Acceptance:
 
-- Offline-created expense syncs when online.
+- Offline-created expense is queued.
+- Expense syncs once online.
 
 ---
 
-### 3.8 Dashboard Mobile
+### 3.7 Dashboard and Reports
 
-#### FR-DASH-001 — Daily Summary
-
-**Priority:** Must
-
-System shall show daily business summary.
-
-Acceptance:
-
-- Total sales today.
-- Transaction count today.
-- Total expenses today.
-- Estimated profit today.
-
-#### FR-DASH-002 — Operational Alerts
+#### FR-DASH-001 — Mobile Dashboard Summary
 
 **Priority:** Must
 
-System shall show useful operational alerts/sections.
+The system shall show daily business summary.
 
 Acceptance:
 
-- Low stock products visible.
-- Recent transactions visible.
-- Top products/menu visible if data exists.
+- Sales, transaction count, expenses, and estimated profit are displayed.
 
-#### FR-DASH-003 — Period Summary
+#### FR-DASH-002 — Operational Insights
+
+**Priority:** Must
+
+The system shall show operational insights.
+
+Acceptance:
+
+- Low stock, recent transactions, and top products are visible when data exists.
+
+#### FR-DASH-003 — Period Filter
 
 **Priority:** Should
 
-System should support basic period selection for reporting.
+The system should support report period selection.
 
 Acceptance:
 
-- User can view today/weekly/monthly or selected period summary.
+- Reports and exports use selected period.
+
+#### FR-REP-001 — Excel Export
+
+**Priority:** Must
+
+The system shall export structured report data to Excel.
+
+Acceptance:
+
+- Export includes summary and useful detail sheets.
+
+#### FR-REP-002 — Report-Ready PDF Export
+
+**Priority:** Must
+
+The system shall export report-ready PDF.
+
+Acceptance:
+
+- PDF includes store/brand header, period, timestamp, summary metrics, optional chart/visual, supporting tables, and footer.
 
 ---
 
-### 3.9 Receipt PNG & Sharing
+### 3.8 Receipt PNG and Sharing
 
 #### FR-RCP-001 — Receipt Number
 
 **Priority:** Must
 
-System shall generate receipt number using default prefix `WRG`.
+The system shall generate receipt numbers using default prefix `WRG`.
 
 Acceptance:
 
 - Receipt number is unique per store.
+- Prefix can be customized later from Settings.
 
 #### FR-RCP-002 — Receipt PNG Generation
 
 **Priority:** Must
 
-System shall generate visual receipt as PNG.
+The system shall generate receipt as PNG.
 
 Acceptance:
 
-- PNG contains store name, receipt number, date/time, items, total, payment, change, and thank you/footer.
+- PNG includes store name, receipt number, date/time, items, total, payment, change, and footer.
 
 #### FR-RCP-003 — Share Receipt
 
 **Priority:** Must
 
-System shall allow user to share receipt PNG to WhatsApp or other apps when supported.
+The system shall allow sharing receipt PNG and text.
 
 Acceptance:
 
-- Share includes PNG file if supported.
-- Share text summary is included or available as fallback.
+- PNG is shared when supported.
+- Text fallback is available.
 
-#### FR-RCP-004 — Receipt PNG Local Retention
+#### FR-RCP-004 — Receipt Retention
 
 **Priority:** Must
 
-System shall store receipt PNG locally only in MVP with temporary retention.
+The system shall store receipt PNG locally and temporarily.
 
 Acceptance:
 
-- PNG not uploaded to cloud by default.
-- PNG can be auto-deleted after successful share if enabled/possible.
-- PNG auto-deletes after 14 days by default.
+- PNG is not uploaded to cloud by default.
+- PNG auto-deletes after successful share when enabled/possible or after 14 days.
 - Receipt can be regenerated from transaction data.
 
 ---
 
-### 3.10 Offline-Capable Local Operations
+### 3.9 Offline and Sync
 
 #### FR-OFF-001 — Local Data Availability
 
 **Priority:** Must
 
-System shall keep previously loaded data available locally.
+The system shall keep previously loaded data available locally.
 
 Acceptance:
 
-- User can open app with local data when offline.
+- User can view local data while offline.
 
 #### FR-OFF-002 — Local Mutation Queue
 
 **Priority:** Must
 
-System shall queue local changes when offline or unstable.
+The system shall queue local changes.
 
 Acceptance:
 
-- Transactions, expenses, product/stok basic changes create sync queue entries.
+- Transactions, expenses, and product changes create queue entries.
 
-#### FR-OFF-003 — Local Realtime UX
+#### FR-OFF-003 — Immediate Local UI Update
 
 **Priority:** Must
 
-System shall update UI immediately after local input.
+The system shall update UI immediately after local input.
 
 Acceptance:
 
-- User sees transaction/expense/product changes without waiting for cloud.
+- User does not wait for cloud response for core local operations.
 
-#### FR-OFF-004 — Sync Status UI
+#### FR-OFF-004 — Sync Status
 
 **Priority:** Must
 
-System shall show sync status.
+The system shall show sync state.
 
 Acceptance:
 
-- User can distinguish saved locally, pending sync, synced, failed, or conflict.
+- User can distinguish pending, syncing, synced, failed, and conflict states.
 
 #### FR-OFF-005 — Retry Sync
 
 **Priority:** Must
 
-System shall retry pending/failed sync when connection returns.
+The system shall retry pending/failed sync when online.
 
 Acceptance:
 
-- Pending mutations sync automatically or via manual retry.
+- Failed queue entries can retry.
 
-#### FR-OFF-006 — Conflict Handling Basic
+#### FR-OFF-006 — Conflict Handling
 
 **Priority:** Must
 
-System shall detect and surface basic conflicts, especially stock conflict.
+The system shall detect stock-related conflicts.
 
 Acceptance:
 
-- Insufficient cloud stock during sync becomes conflict state.
-- User gets clear message and next action.
+- Insufficient cloud stock creates clear conflict message and status.
+
+#### FR-SYNC-001 — Hybrid Write Strategy
+
+**Priority:** Must
+
+The system shall use direct operations for simple entities and RPC for checkout/stock.
+
+Acceptance:
+
+- Simple changes sync directly.
+- Checkout uses server-side transaction.
 
 ---
 
-### 3.11 Cloud Sync
-
-#### FR-SYNC-001 — Initial Pull
-
-**Priority:** Must
-
-System shall pull cloud data into local DB after login.
-
-Acceptance:
-
-- Store/products/transactions/expenses become available locally.
-
-#### FR-SYNC-002 — Push Pending Mutations
-
-**Priority:** Must
-
-System shall push queued local mutations to cloud when online.
-
-Acceptance:
-
-- Pending entries become synced or failed/conflict.
-
-#### FR-SYNC-003 — Hybrid Write Strategy
-
-**Priority:** Must
-
-System shall use hybrid cloud write strategy.
-
-Acceptance:
-
-- Direct table operations for simple entities.
-- RPC/server-side transaction for checkout + stock update.
-
-#### FR-SYNC-004 — Last-Write-Wins for Non-Stock Entities
-
-**Priority:** Must
-
-System shall use simple conflict strategy for non-stock entities in MVP.
-
-Acceptance:
-
-- Products/categories/expenses/settings can use last-write-wins based on updated_at.
-
----
-
-### 3.12 Desktop Dashboard Minimal
+### 3.10 Desktop Dashboard Minimal
 
 #### FR-DESK-001 — Public Landing Page
 
 **Priority:** Must
 
-System shall provide public landing page for Warungin.
+The system shall provide a public landing page.
 
 Acceptance:
 
-- Landing page presents product identity and login entry.
+- Landing page presents product identity and desktop login entry.
 
 #### FR-DESK-002 — Desktop Login
 
 **Priority:** Must
 
-System shall allow login from desktop dashboard using same account.
+The system shall allow login to desktop dashboard.
 
 Acceptance:
 
-- User can login.
-- User sees own store/report data.
+- User sees only their own report data.
 
-#### FR-DESK-003 — Basic Report Dashboard
+#### FR-DESK-003 — Basic Reporting Dashboard
 
 **Priority:** Must
 
-System shall show basic reports on desktop.
+The system shall display basic reports on desktop.
 
 Acceptance:
 
-- Sales summary.
-- Transaction count.
-- Expenses summary.
-- Estimated profit.
-- Top products/menu.
-- Period summary.
+- Sales, transaction count, expenses, estimated profit, top products, and period summary are visible.
 
-#### FR-DESK-004 — Excel Export
+#### FR-DESK-004 — Desktop Excel/PDF Export
 
 **Priority:** Must
 
-System shall export report data as Excel.
+The system shall export desktop reports to Excel and PDF.
 
 Acceptance:
 
-- Export file includes summary and detail sheets where useful.
+- Excel is structured.
+- PDF is report-ready.
 
-#### FR-DESK-005 — PDF Report Export
+#### FR-DESK-005 — Coming Soon Navigation
 
 **Priority:** Must
 
-System shall export report-ready PDF.
+The system shall display future desktop modules as Coming Soon when present.
 
 Acceptance:
 
-- PDF includes brand/store header.
-- Period and timestamp.
-- Summary metrics.
-- Visual/chart snapshot if available.
-- Supporting tables.
-- Footer/branding.
-
-#### FR-DESK-006 — Coming Soon Navigation
-
-**Priority:** Must
-
-System shall show future desktop modules as Coming Soon when appropriate.
-
-Acceptance:
-
-- Nav can show unavailable modules.
-- User is not misled into thinking feature is active.
-
-#### FR-DESK-007 — No Full Desktop Managerial Writes in v2
-
-**Priority:** Must
-
-System shall not implement full desktop CRUD/manajerial flows in MVP v2.
-
-Acceptance:
-
-- Advanced desktop actions remain Coming Soon or unavailable.
-
----
-
-### 3.13 Settings
-
-#### FR-SET-001 — Basic Store Settings
-
-**Priority:** Must
-
-System shall allow basic store setting management.
-
-Acceptance:
-
-- Store name and receipt footer can be updated.
-
-#### FR-SET-002 — Sync/Storage Status
-
-**Priority:** Should
-
-System should expose basic sync/storage status.
-
-Acceptance:
-
-- User can see pending sync count or storage/receipt cleanup status where useful.
-
-#### FR-SET-003 — Demo Reset
-
-**Priority:** Must
-
-System shall expose reset demo data action.
-
-Acceptance:
-
-- User can remove sample rows safely.
-
----
-
-### 3.14 Export & Reporting
-
-#### FR-REP-001 — CSV/Excel Transaction Export
-
-**Priority:** Must
-
-System shall export transactional data to CSV/Excel.
-
-Acceptance:
-
-- Export respects selected period.
-- File can be opened by spreadsheet tools.
-
-#### FR-REP-002 — PDF Report-Ready Export
-
-**Priority:** Must
-
-System shall export report-ready PDF from dashboard/report view.
-
-Acceptance:
-
-- PDF is readable and suitable for owner review/share.
-- Includes summary, visual/chart if available, and supporting tables.
-
-#### FR-REP-003 — Report Period Filter
-
-**Priority:** Must
-
-System shall support report period selection.
-
-Acceptance:
-
-- Report/export output uses selected period.
+- User is not misled into thinking unavailable features are active.
 
 ---
 
 ## 4. External Interface Requirements
 
-### 4.1 User Interface Requirements
+### 4.1 User Interface
 
-UI shall be:
+The UI shall be:
 
-- mobile-first for operational app,
+- mobile-first for operations,
 - responsive for desktop dashboard,
-- Indonesian language first,
-- simple and friendly,
-- not overloaded with advanced accounting terms,
-- clear in empty/error/offline states.
+- Indonesian-language for end-user copy,
+- clear in empty/error/offline/sync states,
+- simple and non-accounting-heavy.
 
 ### 4.2 Hardware Interfaces
 
-MVP v2 does not require dedicated hardware.
+No dedicated hardware is required for MVP.
 
-Not required in MVP:
+Out of scope:
 
-- barcode scanner hardware,
 - Bluetooth printer,
+- barcode scanner hardware,
 - cash drawer,
-- external POS devices.
+- external POS device.
 
 ### 4.3 Software Interfaces
 
@@ -967,20 +733,19 @@ Required:
 
 - Supabase Auth.
 - Supabase Postgres.
-- Browser IndexedDB.
-- Browser Web Share API if available.
+- IndexedDB/Dexie.
+- Web Share API where available.
 - Browser file download APIs.
 
 Future:
 
-- Capacitor Android APIs.
 - Capacitor Share/Filesystem plugins.
 
 ### 4.4 Communication Interfaces
 
 - HTTPS for cloud communication.
-- Supabase client SDK for auth/database.
-- Offline sync queue for delayed cloud communication.
+- Supabase SDK for auth/database.
+- Sync queue for delayed cloud operations.
 
 ---
 
@@ -988,131 +753,129 @@ Future:
 
 ### 5.1 Performance
 
-#### NFR-PERF-001 — Mobile Responsiveness
+#### NFR-PERF-001 — Responsive Local UX
 
-System shall respond quickly on common mobile devices.
+Core UI operations shall respond from local state without waiting for cloud.
 
 Acceptance:
 
-- Core interactions do not feel blocked by cloud sync.
-- Local-first UI updates immediately.
+- Cashier, cart, product list, and expense input feel responsive on mobile.
 
 #### NFR-PERF-002 — Search Performance
 
-System shall support fast product search for small/medium UMKM catalogs.
+Product search shall remain usable for small/medium catalogs.
 
 Acceptance:
 
-- Product search remains usable for at least hundreds of products.
+- Search remains responsive for at least hundreds of products.
 
 #### NFR-PERF-003 — Export Performance
 
-System shall generate Excel/PDF reports for common UMKM data volumes without freezing app excessively.
+Excel/PDF export shall complete reliably for typical UMKM data volume.
 
 Acceptance:
 
-- Export for typical daily/monthly data completes reliably.
-- If heavy, UI shows loading/progress.
+- Export shows loading/progress if needed.
+- Export does not freeze app indefinitely.
 
 ### 5.2 Reliability
 
 #### NFR-REL-001 — Offline Continuity
 
-System shall continue core operations when internet is unavailable.
+Core operations shall continue without active internet.
 
 Acceptance:
 
-- User can continue cashier/expenses/product basics locally.
+- User can create transaction/expense locally while offline.
 
 #### NFR-REL-002 — Sync Recovery
 
-System shall recover from failed sync attempts.
+Failed sync shall be recoverable.
 
 Acceptance:
 
-- Failed mutations can retry.
-- User can see failed status.
+- Pending/failed sync can retry.
 
 #### NFR-REL-003 — Checkout Consistency
 
-System shall avoid partial cloud checkout.
+Cloud checkout shall not partially save.
 
 Acceptance:
 
-- Transaction and stock update are handled atomically via RPC/server-side transaction.
+- RPC/server-side transaction handles transaction and stock update atomically.
 
 ### 5.3 Security
 
-#### NFR-SEC-001 — Authentication Required for Cloud Data
+#### NFR-SEC-001 — Authentication
 
-System shall require authentication for cloud store data.
-
-Acceptance:
-
-- Anonymous mode stays local-only.
-
-#### NFR-SEC-002 — RLS Data Isolation
-
-System shall enforce RLS so user cannot access other users’ data.
+Cloud data access shall require authentication.
 
 Acceptance:
 
-- Cross-user read/write attempts are rejected.
+- Anonymous mode remains local-only.
+
+#### NFR-SEC-002 — RLS Isolation
+
+Cloud data shall be isolated by user/store.
+
+Acceptance:
+
+- Cross-user reads/writes are rejected.
 
 #### NFR-SEC-003 — No Secret Exposure
 
-System shall not expose private service keys in frontend.
+The frontend shall not expose private service keys.
 
 Acceptance:
 
-- Only public anon key is used client-side.
+- Only safe public client keys are used in frontend.
 
 ### 5.4 Privacy
 
 #### NFR-PRI-001 — Data Collection Clarity
 
-System shall make collected data understandable for future Privacy Policy/Data Safety.
+The system shall support future Privacy Policy and Play Store Data Safety clarity.
 
 Data categories:
 
-- account email/auth data,
+- account data,
 - store profile,
-- products/menu,
+- product/menu data,
 - transactions,
 - expenses,
-- local receipt PNG temporary files.
+- temporary local receipt PNG.
 
 #### NFR-PRI-002 — Local Receipt Privacy
 
-System shall keep receipt PNG local-only in MVP.
+Receipt PNG shall remain local-only in MVP.
 
 Acceptance:
 
 - Receipt PNG is not uploaded by default.
-- Temporary receipt cleanup exists.
+- Temporary cleanup exists.
 
 ### 5.5 Usability
 
-#### NFR-USE-001 — Simple Indonesian Copy
+#### NFR-USE-001 — Simple End-User Language
 
-System shall use simple Indonesian language.
-
-Acceptance:
-
-- Error/empty/offline states are understandable.
-
-#### NFR-USE-002 — Minimal Onboarding Friction
-
-System shall let user explore without heavy setup.
+End-user copy shall be simple and clear.
 
 Acceptance:
 
-- Sample data path exists.
+- Empty, error, and offline states are understandable.
+
+#### NFR-USE-002 — Low Onboarding Friction
+
+Users shall be able to explore without heavy setup.
+
+Acceptance:
+
+- Sample data exists.
 - HPP does not block product creation.
 
 #### NFR-USE-003 — Clear Coming Soon States
 
-Desktop future modules shall be marked clearly as Coming Soon.
+Unavailable desktop modules shall be clearly marked.
 
 Acceptance:
 
@@ -1122,23 +885,23 @@ Acceptance:
 
 #### NFR-MAIN-001 — TypeScript
 
-System shall use TypeScript for v2.
+The codebase shall use TypeScript.
 
 Acceptance:
 
-- Domain types and local/cloud payloads are typed.
+- Domain types and sync payloads are typed.
 
 #### NFR-MAIN-002 — Modular Structure
 
-System shall separate app/features/lib/types.
+The codebase shall use modular structure.
 
 Acceptance:
 
-- Code is not concentrated in one large file.
+- Code is separated into app, features, lib, components, and types.
 
 #### NFR-MAIN-003 — Stack Discipline
 
-System shall follow TRD stack unless changed by approval.
+The system shall follow agreed TRD stack.
 
 Acceptance:
 
@@ -1148,115 +911,48 @@ Acceptance:
 
 #### NFR-PORT-001 — PWA/Capacitor Readiness
 
-System shall avoid design decisions that block future Capacitor wrapper.
+The system shall avoid decisions that block future Capacitor wrapper.
 
 Acceptance:
 
-- Local storage/share approach works in browser and can be adapted to Capacitor.
+- Local storage and share behavior can be adapted to Capacitor.
 
 ---
 
 ## 6. Data Requirements
 
-### 6.1 Core Entities
+Core logical entities:
 
-SRS requires the following logical entities:
+- User/Profile.
+- Store.
+- Category.
+- Product/Menu.
+- Payment Method.
+- Transaction.
+- Transaction Item.
+- Expense Category.
+- Expense.
+- Receipt Asset.
+- Sync Queue.
+- Sync State.
+- Onboarding/Demo State.
 
-- User/Profile
-- Store
-- Category
-- Product/Menu
-- Payment Method
-- Transaction
-- Transaction Item
-- Expense Category
-- Expense
-- Receipt Asset
-- Sync Queue
-- Sync State
-- Onboarding/Demo State
+Data requirements:
 
-### 6.2 Data Ownership
-
-All cloud operational data shall be associated with store ownership.
-
-MVP:
-
-- one owner user,
-- one primary store,
-- no staff access.
-
-Future:
-
-- store members and permissions may be added.
-
-### 6.3 Data Retention
-
-- Transaction data retained unless user deletes/cancels according to future policy.
-- Receipt PNG retained locally only and temporary.
-- Receipt PNG deleted after 14 days by default or after share if enabled.
-- Old WarkopKuu v1 cloud data remains separate legacy data.
-
-### 6.4 Data Migration
-
-MVP v2 shall not auto-migrate old WarkopKuu cloud data.
-
-Acceptance:
-
-- v2 uses new schema/tables.
-- legacy tables are not deleted automatically.
+- Store-based ownership.
+- Soft delete for historical safety.
+- Product and transaction item snapshots.
+- HPP default 0/empty-friendly.
+- Receipt PNG local-only and temporary.
+- Legacy v1 data remains separate.
 
 ---
 
-## 7. Sync Requirements
+## 7. Reporting Requirements
 
-### 7.1 Local-First UI Source
+### 7.1 Dashboard Metrics
 
-UI shall read from local DB as primary render source for app operational area.
-
-### 7.2 Cloud Source of Truth
-
-For logged-in users, Supabase is canonical cloud source after sync completes.
-
-### 7.3 Queue Requirements
-
-Queue shall store:
-
-- operation type,
-- entity type,
-- local ID,
-- remote ID if available,
-- payload,
-- status,
-- retry count,
-- last error,
-- timestamps.
-
-### 7.4 Sync Statuses
-
-Required statuses:
-
-- pending,
-- syncing,
-- synced,
-- failed,
-- conflict.
-
-### 7.5 Conflict Priority
-
-MVP conflict priority:
-
-1. checkout/stock conflict,
-2. product update conflict,
-3. expense/settings conflict.
-
----
-
-## 8. Reporting Requirements
-
-### 8.1 Dashboard Metrics
-
-Required metrics:
+Required:
 
 - total sales,
 - transaction count,
@@ -1266,11 +962,9 @@ Required metrics:
 - low stock,
 - recent transactions.
 
-### 8.2 Excel Export
+### 7.2 Excel Export
 
-Excel export shall include useful structured sheets.
-
-Candidate sheets:
+Excel export shall include useful structured sheets, such as:
 
 - Summary,
 - Transactions,
@@ -1278,9 +972,9 @@ Candidate sheets:
 - Expenses,
 - Products.
 
-### 8.3 PDF Export
+### 7.3 PDF Export
 
-PDF shall be formatted as report-ready document.
+PDF export shall be report-ready.
 
 Minimum content:
 
@@ -1289,41 +983,38 @@ Minimum content:
 - export timestamp,
 - summary metrics,
 - chart/visual snapshot if available,
-- top products/menu,
-- transaction/expense table summary,
+- supporting tables,
 - footer/branding.
 
 ---
 
-## 9. Acceptance Criteria Summary
+## 8. Acceptance Criteria Summary
 
 MVP v2 is acceptable when:
 
 1. User can onboard with sample data.
 2. User can register/login.
-3. User can create/manage products with HPP optional-friendly.
+3. User can create/manage products with HPP optional-friendly behavior.
 4. User can make checkout locally.
 5. Stock decreases locally.
-6. Checkout syncs to cloud safely via hybrid/RPC strategy.
+6. Checkout syncs safely to cloud using hybrid/RPC strategy.
 7. User can record expenses.
 8. Dashboard shows meaningful metrics.
-9. User can generate and share receipt PNG.
+9. User can generate/share receipt PNG.
 10. Receipt PNG retention works.
 11. User can export CSV/Excel.
-12. User can export PDF report-ready.
-13. App remains usable for core flows while offline/unstable.
+12. User can export report-ready PDF.
+13. Core flows remain usable offline/unstable.
 14. Pending sync completes when online.
 15. RLS prevents cross-user access.
 16. Desktop landing/login/dashboard minimal works.
-17. Desktop export Excel/PDF works.
-18. Advanced desktop features are clearly Coming Soon.
-19. Build/lint/typecheck pass or known blockers documented.
+17. Desktop Excel/PDF export works.
+18. Advanced desktop modules are clearly Coming Soon.
+19. Build/lint/typecheck pass or blockers are documented.
 
 ---
 
-## 10. Out of Scope for MVP v2
-
-The following are not part of MVP v2 unless explicitly approved later:
+## 9. Out of Scope for MVP v2
 
 - Open Bill.
 - Multi-user owner/staff.
@@ -1338,46 +1029,47 @@ The following are not part of MVP v2 unless explicitly approved later:
 - Native Android rebuild.
 - Full desktop managerial CRUD.
 - AI features.
-- Marketplace/warehouse complex inventory.
+- Complex warehouse/marketplace inventory.
 
 ---
 
-## 11. Traceability Matrix
+## 10. Traceability Matrix
 
-| Requirement Area | PRD | TRD | SRS Section |
+| Requirement Area | PRD | TRD | SRS |
 |---|---|---|---|
-| Rebrand/naming | PRD 5/8 | TRD 15 | SRS 1/2 |
-| Auth/account | PRD 8/12 | TRD 6/9 | SRS 3.1 |
-| Onboarding/demo | PRD 8/10/16 | TRD 11 | SRS 3.2 |
-| Product/HPP | PRD 8/11/16 | TRD 6/15 | SRS 3.4 |
-| POS checkout | PRD 8/10/12 | TRD 8/15 | SRS 3.5 |
-| Offline sync | PRD 8/10/16 | TRD 7/8 | SRS 3.10/7 |
+| Rebrand/naming | PRD 5/8/12 | TRD 15/19 | SRS 1/2/3 |
+| Auth/account | PRD 8 | TRD 6/9 | SRS 3.1 |
+| Onboarding/demo | PRD 8/10 | TRD 11 | SRS 3.2 |
+| Product/HPP | PRD 8/11 | TRD 6 | SRS 3.3 |
+| POS checkout | PRD 8/10 | TRD 8 | SRS 3.4 |
+| Offline sync | PRD 8/10/12 | TRD 7/8 | SRS 3.9/5 |
 | RLS/security | PRD 13 | TRD 9 | SRS 5.3 |
-| Receipt PNG | PRD 8/10/16 | TRD 10 | SRS 3.9 |
-| Export Excel/PDF | PRD 8/12/16 | TRD 12 | SRS 3.14/8 |
-| Desktop minimal | PRD 8/10/16 | TRD 12 | SRS 3.12 |
-| Play Store future | PRD 8/15/16 | TRD 13 | SRS 5.7 |
-| Scope exclusions | PRD 7/17 | TRD 17/19 | SRS 10 |
+| Receipt PNG | PRD 8/10/12 | TRD 10 | SRS 3.8 |
+| Export Excel/PDF | PRD 8/12 | TRD 12 | SRS 3.7/7 |
+| Desktop minimal | PRD 8/10/12 | TRD 12 | SRS 3.10 |
+| Play Store future | PRD 8/14 | TRD 13 | SRS 5.7 |
+| Scope exclusions | PRD 7 | TRD 17/19 | SRS 9 |
 
 ---
 
-## 12. Open Items
+## 11. Open Items
 
-Open items to resolve during Sprint 0 / technical reference step:
+To resolve during Sprint 0:
 
-1. Final selected Excel export library.
-2. Final selected PDF export approach/library.
-3. Exact Dexie schema versioning approach.
-4. Exact Supabase RPC payload contract for checkout.
-5. Exact desktop dashboard route/layout split.
-6. Exact chart library decision if report visuals require one.
-7. Exact storage cleanup behavior for receipt PNG in browser vs Capacitor.
+1. Final Excel export library.
+2. Final PDF export approach/library.
+3. Final receipt PNG library.
+4. Final chart/visual library decision.
+5. Exact Dexie schema versioning approach.
+6. Exact checkout RPC payload contract.
+7. Exact desktop dashboard route/layout split.
+8. Exact receipt cleanup behavior in browser vs future Capacitor.
 
 ---
 
-## 13. SRS Change Control
+## 12. Change Control
 
-SRS must be updated when:
+Update SRS when:
 
 - functional requirements change,
 - non-functional requirements change,
@@ -1387,9 +1079,9 @@ SRS must be updated when:
 - desktop scope changes,
 - security/privacy requirements change.
 
-SRS does not need update for:
+SRS does not need updates for:
 
-- small copy changes,
+- minor copy changes,
 - minor visual polish,
-- internal refactor that preserves behavior,
+- internal refactor with no behavior change,
 - bug fixes that do not alter requirements.

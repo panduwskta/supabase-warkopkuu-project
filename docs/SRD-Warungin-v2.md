@@ -1,9 +1,10 @@
 # DOR — Warungin v2
 
-**Status:** Draft v0.1  
-**Document type:** Development Operating Rules / Sprint & Vibecoding Rules  
+**Status:** Draft v0.2 — English-first baseline  
+**Document Type:** Development Operating Rules / Sprint & Vibecoding Rules  
 **Product:** Warungin / Warungin POS  
 **Related PRD:** `docs/PRD-Warungin-v2.md`  
+**Related SRS:** `docs/SRS-Warungin-v2.md`  
 **Related TRD:** `docs/TRD-Warungin-v2.md`  
 **Owner:** Pandu W Aji / Takis Agency
 
@@ -11,191 +12,181 @@
 
 ## 1. Purpose
 
-Dokumen ini adalah source of truth untuk cara kerja development Warungin v2.
+This document defines the operating rules for developing Warungin v2.
 
-PRD menjawab: **apa yang mau dibangun.**  
-TRD menjawab: **gimana cara bangunnya.**  
-DOR menjawab: **aturan eksekusi, sprint, approval gate, dan disiplin development supaya proses coding tidak melebar.**
+- PRD defines **what product should be built and why**.
+- SRS defines **formal system requirements**.
+- TRD defines **how the system should be technically built**.
+- DOR defines **how development should be executed safely and reviewably**.
 
-Dokumen ini wajib dipakai sebelum masuk tahap development, terutama saat vibecoding dengan AI assistant.
-
----
-
-## 2. Core Development Rule
-
-Warungin v2 harus dikembangkan secara bertahap, kecil, terukur, dan bisa direview cepat.
-
-Aturan utama:
-
-1. Jangan tambah fitur yang tidak diminta.
-2. Jangan ganti library tanpa konfirmasi.
-3. Kalau tidak yakin, tanya dulu.
-4. Ikuti stack dan arsitektur di TRD.
-5. Minimal viable dulu, jangan langsung kompleks.
-6. Jangan over-engineering.
-7. Jangan refactor besar tanpa alasan dan approval.
-8. Jangan menggabungkan terlalu banyak perubahan dalam satu sprint.
-9. Jangan edit file sensitif/config/deploy tanpa konfirmasi jika dampaknya belum jelas.
-10. Jangan klaim selesai tanpa verification plan dan hasil verifikasi.
+This document exists to prevent scope creep, over-engineering, unapproved library changes, and uncontrolled AI/vibecoding behavior.
 
 ---
 
-## 3. Development Flow
+## 2. Core Development Rules
 
-Alur kerja resmi Warungin v2:
+1. Do not add unrequested features.
+2. Do not change or add major libraries without confirmation.
+3. If uncertain, ask first.
+4. Follow PRD, SRS, and TRD.
+5. Build minimum viable scope first.
+6. Avoid over-engineering.
+7. Do not perform large refactors without reason and approval.
+8. Do not combine too many unrelated changes in one sprint.
+9. Do not edit sensitive config/deploy files without confirmation.
+10. Do not claim completion without verification summary and evidence.
+
+---
+
+## 3. Official Development Flow
 
 ```text
 brainstorming
-  → PRD / TRD / SRS / DOR
-  → cari skill & acuan teknis
-  → bagi jadi sprint kecil
+  → PRD / SRS / TRD / DOR
+  → technical reference & skill search
+  → small sprint breakdown
   → per sprint:
       implementation plan
       → review/approval
-      → eksekusi
-      → verification plan
-      → review hasil
-  → ulangi
+      → execution
+      → verification summary
+      → user review
+  → repeat
 ```
 
-Development tidak boleh langsung loncat ke coding tanpa implementation plan yang disetujui.
+No non-trivial coding should start without an approved implementation plan.
 
 ---
 
 ## 4. Source of Truth Hierarchy
 
-Jika ada konflik instruksi:
+If instructions conflict, follow this order:
 
-1. Instruksi user terbaru.
-2. DOR/SRD lama — aturan eksekusi dan sprint.
-3. SRS — spesifikasi kebutuhan sistem formal.
-4. PRD — scope produk dan kebutuhan user.
-5. TRD — arsitektur dan keputusan teknis.
+1. Latest explicit user instruction.
+2. DOR — development process and approval rules.
+3. SRS — formal system requirements.
+4. PRD — product scope and product decisions.
+5. TRD — technical architecture and stack decisions.
 6. Existing codebase.
-7. Referensi eksternal/skill/framework docs.
+7. External references, skills, and framework documentation.
 
-Catatan:
+Notes:
 
-- PRD/TRD/SRS/DOR bisa diupdate jika keputusan berubah.
-- Update dokumen harus dilakukan sebelum implementasi jika perubahan berdampak ke scope/arsitektur.
-- Jangan diam-diam mengubah keputusan produk/teknis di kode tanpa update dokumen.
+- PRD/SRS/TRD/DOR may be updated when decisions change.
+- If implementation would change scope or architecture, update the relevant document first.
+- Do not silently encode product/technical decisions in code without updating docs.
 
 ---
 
 ## 5. Stack Discipline
 
-Stack utama mengikuti TRD:
+Warungin v2 stack follows TRD:
 
-- React + Vite
-- TypeScript
-- Tailwind CSS
-- shadcn/ui
-- Supabase Auth + Postgres + RLS
-- IndexedDB via Dexie.js
+- React + Vite.
+- TypeScript.
+- Tailwind CSS.
+- shadcn/ui.
+- Supabase Auth + Postgres + RLS.
+- IndexedDB via Dexie.js.
 - Hybrid sync strategy:
-  - direct table operations untuk entity sederhana
-  - RPC/server-side transaction untuk checkout + update stok
-- Receipt PNG local-only dengan retention policy
-- Desktop dashboard minimal dengan Excel/PDF export
-- Future Android wrapper via Capacitor setelah web/PWA stabil
+  - direct table operations for simple entities,
+  - RPC/server-side transaction for checkout + stock update.
+- Receipt PNG local-only with retention policy.
+- Desktop dashboard minimal with Excel/PDF export.
+- Future Android wrapper via Capacitor after web/PWA stability.
 
-Dilarang mengganti atau menambahkan library besar tanpa approval.
+Major library changes require approval.
 
-Contoh perlu approval:
+Examples requiring approval:
 
-- Mengganti Dexie ke library local DB lain.
-- Mengganti shadcn/ui ke UI kit lain.
-- Mengganti Supabase ke backend lain.
-- Menambah state management global besar.
-- Menambah PDF/export library yang belum dibahas.
-- Menambah charting library baru.
-- Menambah routing/framework baru.
+- Replacing Dexie.
+- Replacing shadcn/ui.
+- Replacing Supabase.
+- Adding a global state management library.
+- Adding PDF/export/charting libraries.
+- Adding a new routing/framework layer.
 
 ---
 
-## 6. Skill & Technical Reference Step
+## 6. Technical Reference Step
 
-Sebelum development sprint besar dimulai, lakukan tahap pencarian acuan teknis.
+Before major development begins, run a technical reference step.
 
-Tujuan:
+Purpose:
 
-- Mencari framework-specific best practice.
-- Mencari pattern yang relevan dengan stack.
-- Mencari boilerplate/proven structure yang cocok.
-- Mengurangi eksperimen liar di tengah implementasi.
+- Identify framework-specific best practices.
+- Find relevant design patterns.
+- Review proven boilerplate/structure.
+- Reduce guesswork before implementation.
 
-Output tahap ini minimal:
+Required output:
 
-1. Daftar referensi/skill yang dipakai.
-2. Ringkasan kenapa relevan.
-3. Keputusan pattern yang akan diikuti.
-4. Risiko/kompromi dari pattern tersebut.
-5. Library tambahan yang diusulkan, jika ada, beserta alasan dan approval requirement.
+1. References or skills used.
+2. Why each reference is relevant.
+3. Recommended pattern.
+4. Risks and trade-offs.
+5. Any proposed library additions and whether they need approval.
 
-Tahap ini harus dilakukan sebelum sprint teknis besar seperti:
+This step is required before major work such as:
 
 - TypeScript migration.
 - Tailwind/shadcn setup.
 - Dexie local DB.
 - Sync engine.
-- Supabase RPC/RLS.
-- PDF export.
+- Supabase RLS/RPC.
+- Excel/PDF export.
 - Capacitor wrapper.
 
 ---
 
 ## 7. Sprint Discipline
 
-Sprint harus kecil, jelas, dan punya batas.
-
 ### 7.1 Sprint Size
 
-Satu sprint idealnya:
+Each sprint should have:
 
-- 1 tujuan utama.
-- 3–7 file utama maksimal jika memungkinkan.
-- Bisa diverifikasi dalam satu sesi review.
-- Tidak mencampur UI besar + schema besar + sync engine besar sekaligus.
+- one primary objective,
+- limited scope,
+- reviewable file changes,
+- clear verification steps,
+- no unrelated feature bundling.
 
-Jika scope terasa besar, pecah lagi.
+If a sprint feels large, split it.
 
 ### 7.2 Sprint Naming
 
 Format:
 
 ```text
-Sprint N — Nama singkat
+Sprint N — Short Name
 ```
 
-Contoh:
+Examples:
 
-- Sprint 0 — Technical Baseline & Tooling
-- Sprint 1 — TypeScript + App Structure
+- Sprint 0 — Technical Reference & Pattern Search
+- Sprint 1 — TypeScript Baseline
 - Sprint 2 — Tailwind/shadcn Foundation
-- Sprint 3 — Supabase v2 Schema Draft
+- Sprint 3 — Supabase v2 Schema
 - Sprint 4 — Local DB Foundation
-- Sprint 5 — Onboarding Sample Data
 
-### 7.3 Sprint Must-Have
+### 7.3 Required Sprint Components
 
-Setiap sprint harus punya:
+Every sprint must include:
 
-- Objective
-- Scope included
-- Scope excluded
-- Files to create/change
-- Implementation plan
-- Verification plan
-- Known risks
-- Approval before coding
+- Objective.
+- Scope included.
+- Scope excluded.
+- Files to create/modify.
+- Implementation plan.
+- Verification plan.
+- Known risks/questions.
+- Approval before coding.
 
 ---
 
 ## 8. Implementation Plan Requirement
 
-Sebelum menulis/mengedit kode, assistant harus membuat implementation plan.
-
-Implementation plan harus dikirim untuk review sebelum eksekusi.
+Before editing or writing code, create an implementation plan and wait for approval.
 
 ### 8.1 Implementation Plan Template
 
@@ -203,73 +194,71 @@ Implementation plan harus dikirim untuk review sebelum eksekusi.
 ## Implementation Plan — Sprint X: [Name]
 
 ### Objective
-[Tujuan sprint dalam 1–3 kalimat]
+[Goal of the sprint]
 
 ### Scope Included
-- [Item yang akan dikerjakan]
+- [Included work]
 
 ### Scope Excluded
-- [Item yang sengaja tidak dikerjakan]
+- [Explicitly excluded work]
 
 ### Files to Create
-- `path/file` — alasan dibuat
+- `path/file` — why it is created
 
 ### Files to Modify
-- `path/file` — perubahan yang direncanakan
+- `path/file` — planned change
 
 ### Functions/Modules to Add
-- `function/module` — tanggung jawab
+- `function/module` — responsibility
 
 ### Step-by-Step Plan
-1. [Langkah 1]
-2. [Langkah 2]
-3. [Langkah 3]
+1. [Step 1]
+2. [Step 2]
+3. [Step 3]
 
 ### Dependencies / Libraries
-- [Library existing yang dipakai]
-- [Library baru jika ada — butuh approval]
+- [Existing libraries]
+- [New libraries, if any — require approval]
 
 ### Risks / Questions
-- [Risiko atau hal yang perlu keputusan]
+- [Risks or decisions needed]
 
 ### Verification Plan Preview
-- [Cara validasi setelah implementasi]
+- [How this will be verified]
 ```
 
 ### 8.2 Approval Gate
 
-Coding hanya boleh mulai setelah user memberi approval eksplisit, misalnya:
+Coding may only start after explicit approval, such as:
 
-- “oke eksekusi”
-- “lanjut implement”
 - “approve plan”
+- “okay execute”
+- “lanjut implement”
 
-Jika user mengoreksi plan, update plan dulu sebelum coding.
+If the user corrects the plan, update the plan first before coding.
 
 ---
 
 ## 9. Execution Rules
 
-Saat eksekusi sprint:
+During execution:
 
-1. Ikuti implementation plan yang sudah disetujui.
-2. Jangan menambah scope baru di tengah jalan.
-3. Jika menemukan blocker, berhenti dan jelaskan.
-4. Jika perlu library baru, minta approval.
-5. Jika perlu mengubah schema/arsitektur dari TRD, update dokumen/ask first.
-6. Gunakan perubahan sekecil mungkin.
-7. Commit harus representatif dan tidak mencampur banyak unrelated changes.
-8. Jangan menghapus data/file penting tanpa approval.
-9. Jangan melakukan deploy production tanpa approval.
-10. Jangan submit Play Store/ubah config eksternal tanpa approval.
+1. Follow the approved plan.
+2. Do not add new scope mid-sprint.
+3. Stop and report blockers.
+4. Ask before adding libraries.
+5. Ask before changing architecture/schema beyond the approved plan.
+6. Keep changes as small as possible.
+7. Use representative commits.
+8. Do not delete important files/data without approval.
+9. Do not deploy production without approval.
+10. Do not submit Play Store or change external production settings without approval.
 
 ---
 
-## 10. Verification Plan Requirement
+## 10. Verification Summary Requirement
 
-Setelah eksekusi sprint, assistant wajib membuat verification plan/result summary.
-
-User tidak perlu membaca seluruh diff manual. Assistant harus merangkum perubahan dan cara validasinya.
+After execution, provide a verification summary so the user does not need to manually inspect the full diff.
 
 ### 10.1 Verification Summary Template
 
@@ -277,103 +266,103 @@ User tidak perlu membaca seluruh diff manual. Assistant harus merangkum perubaha
 ## Verification Summary — Sprint X: [Name]
 
 ### Files Changed
-- `path/file` — dibuat/diubah/dihapus, alasannya
+- `path/file` — created/modified/deleted and why
 
 ### What Changed
-- [Perubahan utama]
+- [Main changes]
 
 ### What Was Added
-- [Fitur/modul/fungsi baru]
+- [New functionality/modules]
 
 ### What Was Modified
-- [Modifikasi existing behavior]
+- [Changed behavior]
 
 ### What Was Removed
-- [Jika ada]
+- [Removed items, if any]
 
 ### Verification Performed
-- `command` — hasil
-- Manual check — hasil
+- `command` — result
+- Manual check — result
 
 ### How User Can Review
-1. [Langkah review user]
-2. [Hal yang perlu diperhatikan]
+1. [Review step]
+2. [What to check]
 
 ### Known Limitations / Follow-up
-- [Limitasi atau task berikutnya]
+- [Limitations or next tasks]
 ```
 
 ### 10.2 Minimum Verification Gate
 
-Minimal salah satu harus dilakukan sebelum klaim selesai:
+Before claiming completion, run the smallest meaningful verification gate:
 
-- `npm run build`
-- `npm run lint`
-- typecheck
-- unit test jika tersedia
-- manual browser/app check jika relevan
-- SQL/RLS verification jika schema berubah
-- direct inspection jika belum ada test/build gate
+- `npm run build`,
+- `npm run lint`,
+- TypeScript typecheck,
+- unit tests if available,
+- manual browser/app check if relevant,
+- SQL/RLS verification if schema changed,
+- direct inspection if no automated gate exists.
 
-Jika gate tidak bisa dijalankan, jelaskan alasannya.
+If verification cannot be run, state why.
 
 ---
 
 ## 11. Documentation Update Rules
 
-PRD/TRD/SRD harus diupdate jika ada perubahan pada:
+Update PRD/SRS/TRD/DOR when changes affect:
 
-- Scope fitur.
-- Stack/library.
-- Data model/schema.
-- Sync strategy.
-- Export/reporting behavior.
-- Desktop dashboard scope.
-- Android/Play Store approach.
-- Sprint/development process.
+- feature scope,
+- system requirements,
+- non-functional requirements,
+- stack/library decisions,
+- data model/schema,
+- sync strategy,
+- export/reporting behavior,
+- desktop scope,
+- Android/Play Store approach,
+- development process.
 
-Dokumen tidak perlu diupdate untuk:
+No documentation update is required for:
 
-- Bug fix kecil.
-- Copy/UI polish kecil.
-- Refactor internal yang tidak mengubah arsitektur.
-- Test/lint cleanup yang tidak mengubah behavior.
+- minor copy changes,
+- small UI polish,
+- internal refactor with no behavior change,
+- bug fix that does not alter requirements.
 
 ---
 
-## 12. Scope Control Rules
+## 12. Scope Control
 
 ### 12.1 Allowed in MVP v2
-
-Mengacu PRD/TRD:
 
 - Rebrand Warungin.
 - TypeScript migration.
 - Tailwind/shadcn foundation.
 - Supabase v2 schema.
-- Local IndexedDB/Dexie.
+- IndexedDB/Dexie local DB.
 - Offline-capable sync.
 - Single-user account/store.
-- Product/menu/stok dasar.
+- Product/menu/basic stock.
 - HPP/modal field.
 - Cashier checkout.
 - Transaction history.
 - Expenses.
-- Dashboard mobile.
+- Mobile dashboard.
 - Receipt PNG local-only.
-- Export CSV/Excel.
-- PDF report-ready.
+- CSV/Excel export.
+- PDF report-ready export.
 - Onboarding sample data.
-- Desktop minimal dashboard.
-- Coming Soon nav for future desktop modules.
+- Desktop dashboard minimal.
+- Coming Soon desktop nav.
 
 ### 12.2 Not Allowed Without New Approval
 
-- Open Bill implementation.
+- Open Bill.
 - Multi-user owner/staff.
 - Barcode scanning.
 - Supplier management.
-- Stock in/out advanced.
+- Advanced stock in/out.
 - Weighted average HPP.
 - Bluetooth print.
 - Payment gateway.
@@ -384,46 +373,40 @@ Mengacu PRD/TRD:
 
 ---
 
-## 13. Recommended Initial Sprint Breakdown
+## 13. Initial Sprint Breakdown
 
-This is an initial draft. Final sprint plan should be reviewed before development.
+Final sprint plan must still be reviewed before development.
 
 ### Sprint 0 — Technical Reference & Pattern Search
 
 Objective:
 
-- Cari skill/acuan teknis untuk stack dan pattern.
+- Confirm technical patterns and library candidates before coding.
 
 Scope:
 
-- TypeScript migration approach.
+- TypeScript migration pattern.
 - Tailwind/shadcn setup pattern.
 - Dexie local DB pattern.
 - Supabase RLS/RPC pattern.
-- PDF/Excel export options.
+- Excel/PDF export options.
+- Receipt PNG library options.
 
 Output:
 
 - Technical reference notes.
-- Final recommendation before coding.
+- Recommended libraries/patterns.
+- Approval items.
 
 ### Sprint 1 — TypeScript Baseline & App Structure
 
 Objective:
 
-- Migrasi fondasi project ke TypeScript dan struktur folder yang siap v2.
-
-Scope:
-
-- `src/app`
-- `src/features`
-- `src/lib`
-- `src/types`
-- TypeScript config/build compatibility
+- Move project foundation to TypeScript and modular structure.
 
 Excluded:
 
-- UI redesign besar.
+- UI redesign.
 - Sync engine.
 - Schema migration.
 
@@ -431,14 +414,7 @@ Excluded:
 
 Objective:
 
-- Setup design system dasar.
-
-Scope:
-
-- Tailwind config.
-- shadcn/ui base.
-- layout shell mobile-first.
-- theme token Warungin.
+- Set up design system foundation.
 
 Excluded:
 
@@ -448,29 +424,17 @@ Excluded:
 
 Objective:
 
-- Membuat migration SQL v2.
-
-Scope:
-
-- `stores`, `categories`, `products`, `transactions`, `transaction_items`, `expenses`, etc.
-- RLS policy draft.
-- RPC checkout draft if approved.
+- Create v2 schema migration and RLS draft.
 
 Excluded:
 
-- UI integration penuh.
+- Full UI integration.
 
 ### Sprint 4 — Local DB Foundation
 
 Objective:
 
-- Setup Dexie local DB and repositories.
-
-Scope:
-
-- Local schema.
-- Entity types.
-- Basic CRUD local repositories.
+- Set up Dexie local DB and repositories.
 
 Excluded:
 
@@ -480,67 +444,40 @@ Excluded:
 
 Objective:
 
-- User bisa masuk ke app dengan sample data.
-
-Scope:
-
-- Business type selection.
-- Demo seed data.
-- Reset sample data.
+- Enable sample data onboarding.
 
 Excluded:
 
 - Cloud sync.
 
-### Sprint 6 — Core Product/Menu + HPP
+### Sprint 6 — Product/Menu + HPP
 
 Objective:
 
-- Product/menu management dasar dengan HPP/modal.
-
-Scope:
-
-- Product list.
-- Add/edit product.
-- Category basic.
-- HPP default 0/empty-friendly.
+- Implement product/menu management with HPP.
 
 Excluded:
 
 - Barcode.
 - Supplier.
-- Stock movement advanced.
+- Advanced stock movement.
 
-### Sprint 7 — Cashier Checkout + Receipt Number
+### Sprint 7 — Cashier Checkout Local
 
 Objective:
 
-- Core POS flow berjalan lokal.
-
-Scope:
-
-- Cart.
-- Checkout.
-- Stock deduction local.
-- Receipt number default `WRG`.
+- Implement local cart/checkout flow.
 
 Excluded:
 
 - Receipt PNG.
-- Cloud sync RPC.
+- Cloud RPC sync.
 
 ### Sprint 8 — Sync Engine MVP
 
 Objective:
 
-- Queue mutation dan sync cloud dasar.
-
-Scope:
-
-- Pull cloud to local.
-- Push pending mutations.
-- Sync status.
-- Hybrid strategy foundation.
+- Implement queue and basic cloud sync.
 
 Excluded:
 
@@ -550,13 +487,7 @@ Excluded:
 
 Objective:
 
-- Checkout cloud sync aman.
-
-Scope:
-
-- RPC/server transaction.
-- Stock validation.
-- Conflict state basic.
+- Implement safe checkout cloud sync.
 
 Excluded:
 
@@ -566,14 +497,7 @@ Excluded:
 
 Objective:
 
-- Struk visual bisa dishare.
-
-Scope:
-
-- Receipt component.
-- PNG generation.
-- Web Share API.
-- Local retention 14 hari.
+- Implement receipt PNG generation and sharing.
 
 Excluded:
 
@@ -584,47 +508,27 @@ Excluded:
 
 Objective:
 
-- Dashboard mobile dan export dasar.
-
-Scope:
-
-- Sales/expense/profit summary.
-- CSV/Excel export.
-- PDF report-ready.
+- Implement dashboard metrics and CSV/Excel/PDF export.
 
 Excluded:
 
 - Advanced report builder.
 
-### Sprint 12 — Desktop Minimal Dashboard
+### Sprint 12 — Desktop Dashboard Minimal
 
 Objective:
 
-- Landing page + desktop login + laporan basic.
-
-Scope:
-
-- Landing entry.
-- Desktop dashboard basic.
-- Excel/PDF export.
-- Coming Soon nav.
+- Implement landing page, desktop login, basic reports, export, and Coming Soon nav.
 
 Excluded:
 
-- Full desktop CRUD/manajerial.
+- Full desktop CRUD/managerial features.
 
 ### Sprint 13 — Hardening & QA
 
 Objective:
 
-- Stabilkan MVP sebelum release.
-
-Scope:
-
-- Build/lint/typecheck.
-- Offline/online QA.
-- RLS verification.
-- Mobile responsive QA.
+- Stabilize MVP before release.
 
 Excluded:
 
@@ -632,20 +536,20 @@ Excluded:
 
 ---
 
-## 14. Assistant Operating Rules for Warungin Vibecoding
+## 14. Assistant Operating Rules
 
-When user asks to develop/code Warungin:
+When developing Warungin or similar projects:
 
-1. Check PRD/TRD/SRD before planning.
-2. If task affects prior decisions, search memory if needed.
-3. If task is bigger than a small fix, create implementation plan first.
-4. Wait for approval before editing code.
+1. Read/check relevant PRD/SRS/TRD/DOR before planning.
+2. If the task affects previous decisions, check memory/docs.
+3. For non-trivial work, create implementation plan first.
+4. Wait for approval before code edits.
 5. Execute only approved scope.
 6. Verify with the smallest meaningful gate.
-7. Summarize verification and changed files.
-8. Recommend next sprint only after current sprint is verified.
+7. Summarize changed files and verification.
+8. Recommend next sprint only after current work is verified.
 
-If asked to “lanjut coding” without a sprint decision, assistant should ask or propose the next smallest sprint.
+If the user says “continue coding” without a sprint decision, propose the next smallest sprint or ask for confirmation.
 
 ---
 
@@ -658,5 +562,5 @@ DOR is accepted when:
 - Verification summary gate is mandatory.
 - Sprint size and scope rules are clear.
 - Stack discipline is clear.
-- No-feature-creep rules are explicit.
+- Feature-creep prevention rules are explicit.
 - Initial sprint breakdown is available for review.
