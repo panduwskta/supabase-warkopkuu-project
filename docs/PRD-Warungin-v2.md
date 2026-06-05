@@ -1,11 +1,13 @@
 # PRD — Warungin v2
 
-**Status:** Draft v0.1  
+**Status:** Draft v0.2 — naming locked  
 **Product:** Warungin  
+**Product label:** Warungin POS  
 **Previous baseline:** WarkopKuu v1  
 **Reference benchmark:** KasirGratisan repo (`panduwskta/kasirgratisan`)  
 **Owner:** Pandu W Aji / Takis Agency  
-**Tagline candidate:** Kelola warung dari genggaman.
+**Tagline:** Kelola warung dari genggaman.  
+**Play Store title candidate:** Warungin: Kasir Warung UMKM
 
 ---
 
@@ -108,6 +110,20 @@ Belum menjadi fokus utama v2, tetapi beberapa fondasi perlu disiapkan agar fitur
 ## 5. Value Proposition
 
 Warungin membantu pemilik warung mencatat pesanan, memantau stok, menghitung pengeluaran, dan melihat laporan harian dalam satu aplikasi sederhana yang bisa digunakan dari HP.
+
+### Naming Decision
+
+Nama produk final untuk v2 adalah **Warungin**.
+
+Keputusan ini mengunci arah rebrand dari WarkopKuu ke Warungin. Walaupun pola nama berakhiran “-in” cukup umum di produk digital Indonesia, Warungin tetap dipilih karena paling terasa natural untuk kategori warung/kedai, mudah diingat, dan paling cocok dengan positioning produk.
+
+Untuk menghindari kesan generik/template, Warungin perlu dibedakan lewat:
+
+- Positioning yang lebih matang sebagai aplikasi kasir dan manajemen warung, bukan sekadar aplikasi pencatatan.
+- Visual identity yang clean, product-ready, dan tidak terlalu playful.
+- Copywriting yang sederhana tapi dewasa; hindari terlalu banyak permainan kata “-in”.
+- Product label yang lebih jelas untuk konteks teknis/marketplace: **Warungin POS**.
+- Play Store title kandidat: **Warungin: Kasir Warung UMKM**.
 
 ### Positioning Statement
 
