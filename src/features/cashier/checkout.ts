@@ -7,6 +7,7 @@ import {
   type LocalTransaction,
   type LocalTransactionItem,
 } from '@/lib/db';
+import { enqueueSyncQueueItems, type EnqueueSyncQueueInput } from '@/features/sync-queue';
 
 import { assertValidCart, calculateCartProfit, calculateCartTotal, calculateChange, resolveCartItems, validateCartInput, validateCartStock } from './cart';
 import { generateReceiptNumber } from './receipt-number';
@@ -68,6 +69,39 @@ function buildUpdatedProducts(resolvedItems: ResolvedCartItem[], timestamp: stri
   }));
 }
 
+function buildCheckoutSyncQueueItems(
+  transaction: LocalTransaction,
+  transactionItems: LocalTransactionItem[],
+  updatedProducts: LocalProduct[]
+): EnqueueSyncQueueInput[] {
+  return [
+    {
+      storeId: transaction.storeId,
+      entityType: 'transaction',
+      entityLocalId: transaction.localId,
+      entityRemoteId: transaction.remoteId,
+      operation: 'create',
+      payload: { ...transaction },
+    },
+    ...transactionItems.map((item) => ({
+      storeId: item.storeId,
+      entityType: 'transactionItem' as const,
+      entityLocalId: item.localId,
+      entityRemoteId: item.remoteId,
+      operation: 'create' as const,
+      payload: { ...item },
+    })),
+    ...updatedProducts.map((product) => ({
+      storeId: product.storeId,
+      entityType: 'product' as const,
+      entityLocalId: product.localId,
+      entityRemoteId: product.remoteId,
+      operation: 'update' as const,
+      payload: { ...product },
+    })),
+  ];
+}
+
 export async function checkoutLocal(input: CheckoutInput): Promise<CheckoutResult> {
   assertValidCart(validateCartInput(input.cartItems));
 
@@ -81,13 +115,16 @@ export async function checkoutLocal(input: CheckoutInput): Promise<CheckoutResul
   const transactionItems = buildTransactionItems(transaction, resolvedItems, timestamp);
   const updatedProducts = buildUpdatedProducts(resolvedItems, timestamp);
 
+  const syncQueueItems = buildCheckoutSyncQueueItems(transaction, transactionItems, updatedProducts);
+
   await warunginDb.transaction(
     'rw',
-    [warunginDb.transactions, warunginDb.transactionItems, warunginDb.products],
+    [warunginDb.transactions, warunginDb.transactionItems, warunginDb.products, warunginDb.syncQueue],
     async () => {
       await warunginDb.transactions.add(transaction);
       await warunginDb.transactionItems.bulkAdd(transactionItems);
       await warunginDb.products.bulkPut(updatedProducts);
+      await enqueueSyncQueueItems(syncQueueItems);
     }
   );
 
@@ -98,4 +135,4 @@ export async function checkoutLocal(input: CheckoutInput): Promise<CheckoutResul
   };
 }
 
-export { buildTransactionItems };
+export { buildCheckoutSyncQueueItems, buildTransactionItems };
