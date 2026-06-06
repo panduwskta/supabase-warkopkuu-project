@@ -3,6 +3,8 @@
 **Status:** Draft v0.1  
 **Scope:** Local sync queue foundation only. No Supabase push worker, no pull sync, no conflict resolver UI.
 
+> Alignment note: after Sprint 8.5 review, this sprint should be understood as **Sync Queue Foundation / partial Sync Engine MVP**. The SRD roadmap's broader "Sync Engine MVP" also expects basic cloud sync, which is still pending.
+
 ---
 
 ## 1. Summary
@@ -79,10 +81,14 @@ This keeps local checkout data and its sync intent atomic.
 
 ## 6. Recommended Follow-Up
 
-Next sprint should implement the first push worker for queue items, starting with checkout entities:
+Next sprint should not implement checkout sync as generic direct table pushes.
 
-1. push transaction,
-2. push transaction items,
-3. push product stock updates,
-4. mark queue items synced or failed,
-5. update local entity `remoteId`, `syncStatus`, and `lastSyncedAt` where applicable.
+Correct follow-up direction:
+
+1. prepare checkout RPC/server-side transaction contract,
+2. implement safe checkout cloud sync through RPC,
+3. keep transaction, transaction items, and stock deduction atomic,
+4. mark queue items synced, failed, or conflict based on structured RPC result,
+5. update local entity `remoteId`, `syncStatus`, and `lastSyncedAt` only after a safe cloud result.
+
+Direct table sync remains appropriate later for simple entities such as products, categories, expenses, payment methods, settings, and onboarding/demo state.
