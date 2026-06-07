@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import writeExcelFile from 'write-excel-file/browser';
@@ -16,6 +15,7 @@ import {
 } from '../features/local-app';
 import { shareReceipt } from '../features/receipts/share-receipt';
 import { runSimpleEntitySync } from '../features/sync-engine';
+import { getSupabaseClient, getSupabaseEnvironmentIssue } from '../lib/supabase';
 import type { ReceiptData } from '../features/receipts/types';
 import {
   Coffee,
@@ -38,9 +38,7 @@ import {
   Package,
   WalletCards,
 } from 'lucide-react';
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-const supabase = SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+const supabase = getSupabaseClient();
 const LOCAL_KEY = 'warkopkuu_local_v1';
 
 const uid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -285,7 +283,13 @@ async function hashPassword(password, salt) {
 function useAuth() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const configIssue = getSupabaseEnvironmentIssue();
   useEffect(() => {
+    if (configIssue) {
+      setUser(null);
+      setLoading(false);
+      return;
+    }
     if (supabase) {
       const {
         data: { subscription },
@@ -314,8 +318,9 @@ function useAuth() {
       window.removeEventListener('storage', on);
       window.removeEventListener('warkop-local-change', on);
     };
-  }, []);
+  }, [configIssue]);
   const signUp = async ({ name, email, password }) => {
+    if (configIssue) throw new Error(configIssue);
     if (supabase) {
       const { error } = await supabase.auth.signUp({ email, password, options: { data: { name } } });
       if (error) throw error;
@@ -332,6 +337,7 @@ function useAuth() {
     window.dispatchEvent(new Event('warkop-local-change'));
   };
   const signIn = async ({ email, password }) => {
+    if (configIssue) throw new Error(configIssue);
     if (supabase) {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
@@ -350,7 +356,7 @@ function useAuth() {
     localStorage.removeItem('warkop_session');
     window.dispatchEvent(new Event('warkop-local-change'));
   };
-  return { user, loading, signUp, signIn, signOut, mode: supabase ? 'cloud' : 'local' };
+  return { user, loading, signUp, signIn, signOut, mode: supabase ? 'cloud' : 'local', configIssue };
 }
 
 function useStore(user) {
@@ -459,15 +465,16 @@ function AuthScreen({ auth }) {
           </div>
         </div>
         <div className="auth-tabs">
-          <button className={mode === 'login' ? 'active' : ''} onClick={() => setMode('login')}>Masuk</button>
-          <button className={mode === 'register' ? 'active' : ''} onClick={() => setMode('register')}>Daftar</button>
+          <button disabled={Boolean(auth.configIssue)} className={mode === 'login' ? 'active' : ''} onClick={() => setMode('login')}>Masuk</button>
+          <button disabled={Boolean(auth.configIssue)} className={mode === 'register' ? 'active' : ''} onClick={() => setMode('register')}>Daftar</button>
         </div>
+        {auth.configIssue && <div className="error">Preview develop belum terhubung ke Supabase staging. {auth.configIssue}</div>}
         <form onSubmit={submit} className="form">
           {mode === 'register' && <label>Nama Usaha / Owner<input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Warung Pak Budi" /></label>}
           <label>Email<input type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="nama@email.com" /></label>
           <label>Password<input type="password" required minLength="6" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Minimal 6 karakter" /></label>
           {err && <div className="error">{err}</div>}
-          <button disabled={busy} className="primary">{busy ? 'Memproses...' : mode === 'login' ? 'Masuk ke Dashboard' : 'Buat Akun'}</button>
+          <button disabled={busy || Boolean(auth.configIssue)} className="primary">{busy ? 'Memproses...' : mode === 'login' ? 'Masuk ke Dashboard' : 'Buat Akun'}</button>
         </form>
         <p className="muted small">Mode penyimpanan: <b>{auth.mode === 'cloud' ? 'Cloud database/auth' : 'Akun lokal browser'}</b></p>
         <Credit />

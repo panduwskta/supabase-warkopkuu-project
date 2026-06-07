@@ -1,1 +1,1 @@
-export { getSupabaseClient } from './client';
+export { getConfiguredSupabaseProjectRef, getExpectedSupabaseProjectRef, getSupabaseClient, getSupabaseEnvironmentIssue } from './client';
