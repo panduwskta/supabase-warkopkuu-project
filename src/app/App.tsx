@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import writeExcelFile from 'write-excel-file/browser';
+import { DESKTOP_COMING_SOON_ITEMS } from '../features/desktop';
 import { shareReceipt } from '../features/receipts/share-receipt';
 import type { ReceiptData } from '../features/receipts/types';
 import {
@@ -10,6 +11,7 @@ import {
   ShoppingCart,
   List,
   LayoutDashboard,
+  Monitor,
   Plus,
   Trash2,
   Receipt,
@@ -493,12 +495,22 @@ function AuthScreen({ auth }) {
   };
   return (
     <div className="auth">
+      <section className="desktop-public-hero">
+        <div className="hero-pill"><Monitor /> Dashboard desktop minimal</div>
+        <h2>Warungin POS untuk operasional warung yang lebih rapi.</h2>
+        <p>Catat pesanan dari HP, lalu cek ringkasan usaha dan unduh laporan dari desktop dengan akun yang sama.</p>
+        <div className="hero-points">
+          <span>Pendapatan harian</span>
+          <span>Export Excel/PDF</span>
+          <span>Modul lanjutan Coming Soon</span>
+        </div>
+      </section>
       <div className="auth-card">
         <div className="brand">
           <div className="brand-icon"><Coffee /></div>
           <div>
-            <h1>Warkop<span>Kuu</span></h1>
-            <p>Sistem kasir & manajemen warung Indonesia</p>
+            <h1>Warung<span>in</span></h1>
+            <p>Kasir warung UMKM Indonesia</p>
           </div>
         </div>
         <div className="auth-tabs">
@@ -506,7 +518,7 @@ function AuthScreen({ auth }) {
           <button className={mode === 'register' ? 'active' : ''} onClick={() => setMode('register')}>Daftar</button>
         </div>
         <form onSubmit={submit} className="form">
-          {mode === 'register' && <label>Nama Kedai / Owner<input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Warkop Pak Budi" /></label>}
+          {mode === 'register' && <label>Nama Usaha / Owner<input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Warung Pak Budi" /></label>}
           <label>Email<input type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="nama@email.com" /></label>
           <label>Password<input type="password" required minLength="6" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Minimal 6 karakter" /></label>
           {err && <div className="error">{err}</div>}
@@ -664,7 +676,7 @@ function App() {
     const csv = '\uFEFF' + rows.map((r) => r.map((v) => `"${String(v).replaceAll('"', '""')}"`).join(',')).join('\n');
     downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `transaksi-warungin-${new Date().toISOString().slice(0, 10)}.csv`);
   };
-  const activeLabel = NAV_ITEMS.find((n) => n[0] === active)?.[1];
+  const activeLabel = active === 'desktop' ? 'Desktop' : NAV_ITEMS.find((n) => n[0] === active)?.[1];
   const salesCount = store.orders.reduce((acc, order) => {
     order.items.forEach((item) => { acc[item.id] = (acc[item.id] || 0) + item.qty; });
     return acc;
@@ -676,8 +688,8 @@ function App() {
       {toast && <div className={`toast ${toast.type}`}>{toast.type === 'error' ? <X /> : <CheckCircle2 />} {toast.message}</div>}
       <MobileTopBar activeLabel={activeLabel} user={auth.user} />
       <aside>
-        <div className="side-brand"><div className="brand-icon"><Coffee /></div><div><h1>Warkop<span>Kuu</span></h1><p>Sistem Manajemen</p></div></div>
-        <nav>{NAV_ITEMS.map(([id, label, Icon]) => <button key={id} onClick={() => setActive(id)} className={active === id ? 'active' : ''}><Icon /> <span>{label}</span></button>)}</nav>
+        <div className="side-brand"><div className="brand-icon"><Coffee /></div><div><h1>Warung<span>in</span></h1><p>Sistem Manajemen</p></div></div>
+        <nav>{NAV_ITEMS.map(([id, label, Icon]) => <button key={id} onClick={() => setActive(id)} className={active === id ? 'active' : ''}><Icon /> <span>{label}</span></button>)}<button className={active === 'desktop' ? 'active desktop-only-nav' : 'desktop-only-nav'} onClick={() => setActive('desktop')}><Monitor /> <span>Desktop</span></button></nav>
         <div className="userbox"><UserCircle2 /><div><b>{auth.user.user_metadata?.name || auth.user.name || auth.user.email}</b><small>{auth.mode === 'cloud' ? 'Cloud account' : 'Local account'}</small></div></div>
         <Credit compact />
         <button className="logout" onClick={auth.signOut}><LogOut /> Logout</button>
@@ -691,6 +703,7 @@ function App() {
           {active === 'menu' && <Menu menu={store.menu} newMenu={newMenu} setNewMenu={setNewMenu} addMenu={addMenu} del={async (id) => { await store.deleteMenu(id); setCart((c) => c.filter((i) => i.id !== id)); store.refresh(); show('Menu dihapus'); }} setEdit={setEdit} />}
           {active === 'pesanan' && <Pesanan orders={store.orders} exportCsv={exportCsv} onShareOrder={handleShareOrder} />}
           {active === 'pengeluaran' && <Pengeluaran expenses={store.expenses} expense={expense} setExpense={setExpense} addExpense={addExpense} del={async (id) => { await store.deleteExpense(id); store.refresh(); show('Pengeluaran dihapus'); }} />}
+          {active === 'desktop' && <DesktopDashboard report={report} period={reportPeriod} setPeriod={setReportPeriod} storeName={currentStoreName} userEmail={auth.user.email} />}
         </>}
         <div className="main-credit"><Credit /></div>
         {checkoutOpen && <CheckoutModal total={cartTotal} onClose={() => setCheckoutOpen(false)} onPay={processCheckout} />}
@@ -706,7 +719,7 @@ function CheckoutModal({ total, onClose, onPay }) {
   const change = Math.max(0, Number(paid || 0) - total);
   return <div className="modal" onClick={onClose}><div className="modal-card checkout-sheet" onClick={(e) => e.stopPropagation()}><div className="modal-head"><h3>Pembayaran</h3><button onClick={onClose}><X /></button></div><div className="pay-summary"><span>Total Belanja</span><b>{formatRp(total)}</b></div><label className="pay-input">Uang diterima<input type="number" min={0} value={paid} onChange={(e) => setPaid(e.target.value)} autoFocus /></label><div className="pay-actions"><button type="button" onClick={() => setPaid(total)}>Bayar Pas</button><button type="button" onClick={() => setPaid(Math.ceil(total / 5000) * 5000)}>Bulat 5rb</button></div><div className="change-box"><span>Kembalian</span><b>{formatRp(change)}</b></div><button className="primary" disabled={Number(paid || 0) < total} onClick={() => onPay(paid)}><CheckCircle2 /> Konfirmasi Pembayaran</button></div></div>;
 }
-function MobileTopBar({ activeLabel, user }) { return <div className="mobile-top"><div className="brand-mini"><div className="brand-icon"><Coffee /></div><div><b>WarkopKuu</b><small>{activeLabel}</small></div></div><div className="avatar-mini"><UserCircle2 /><span>{user?.email?.slice(0, 1)?.toUpperCase()}</span></div></div>; }
+function MobileTopBar({ activeLabel, user }) { return <div className="mobile-top"><div className="brand-mini"><div className="brand-icon"><Coffee /></div><div><b>Warungin</b><small>{activeLabel}</small></div></div><div className="avatar-mini"><UserCircle2 /><span>{user?.email?.slice(0, 1)?.toUpperCase()}</span></div></div>; }
 function MobileBottomNav({ active, setActive }) { return <div className="bottom-nav">{NAV_ITEMS.map(([id, label, Icon]) => <button key={id} onClick={() => setActive(id)} className={active === id ? 'active' : ''}><Icon /><span>{label}</span></button>)}</div>; }
 function Credit({ compact = false }) { return <div className={compact ? 'credit compact' : 'credit'}>Built by <b>Takis Agency</b><span> · </span>Crafted by <b>Pandu W Aji</b></div>; }
 function Splash({ small }) { return <div className={small ? 'splash small' : 'splash'}><Coffee /><p>Menyiapkan Kedai...</p></div>; }
@@ -714,6 +727,9 @@ function Stat({ icon: Icon, label, value, cls = '' }) { return <div className="s
 function Dashboard({ report, period, setPeriod, storeName, onShareOrder }) {
   const exportActions = <div className="export-actions"><button onClick={() => exportReportCsv(report)}><Download /> CSV</button><button onClick={() => exportReportExcel(report, storeName)}><Download /> Excel</button><button onClick={() => exportReportPdf(report, storeName)}><FileText /> PDF</button></div>;
   return <section className="space"><div className="dashboard-title"><div><h2>Ringkasan {report.periodLabel}</h2><p>Pantau pendapatan, transaksi, pengeluaran, dan stok menipis.</p></div>{exportActions}</div><div className="period-chips report-filter">{PERIODS.map(([id, label]) => <button key={id} className={period === id ? 'active' : ''} onClick={() => setPeriod(id)}>{label}</button>)}</div><div className="stats"><Stat icon={Receipt} label="Pendapatan" value={formatRp(report.summary.pendapatan)} cls="green" /><Stat icon={ShoppingCart} label="Jumlah Transaksi" value={`${report.summary.jumlahTransaksi} trx`} cls="blue" /><Stat icon={WalletCards} label="Pengeluaran" value={formatRp(report.summary.pengeluaran)} cls="red" /><Stat icon={Package} label="Perkiraan Laba" value={formatRp(report.summary.perkiraanLaba)} cls="amber" /></div><div className="dashboard-grid"><Card title="Menu Terlaris">{report.topProducts.length ? <div className="simple-list">{report.topProducts.map((item) => <div key={item.name} className="simple-row"><div><b>{item.name}</b><small>{item.qty} terjual</small></div><strong>{formatRp(item.total)}</strong></div>)}</div> : <Empty text="Belum ada menu terjual pada periode ini." />}</Card><Card title="Stok Menipis">{report.lowStock.length ? <div className="simple-list">{report.lowStock.map((item) => <div key={item.id} className="simple-row"><div><b>{item.name}</b><small>{item.category || 'Menu'} · sisa {item.stock}</small></div><span className="badge danger-badge">Perlu dicek</span></div>)}</div> : <Empty text="Tidak ada stok menipis." />}</Card></div><Card title="Transaksi Terbaru">{report.recentOrders.length ? <div className="mobile-card-list always">{report.recentOrders.map((o) => <OrderCard key={o.id} order={o} onShareOrder={onShareOrder} />)}</div> : <Empty text="Belum ada transaksi pada periode ini." />}</Card></section>;
+}
+function DesktopDashboard({ report, period, setPeriod, storeName, userEmail }) {
+  return <section className="desktop-dashboard space"><div className="desktop-hero-card"><div><span className="hero-pill"><Monitor /> Dashboard desktop</span><h2>{storeName}</h2><p>Lihat ringkasan usaha, cek performa periode berjalan, dan unduh laporan dari layar besar.</p><small>{userEmail}</small></div><div className="desktop-export-box"><span>Unduh Laporan</span><button onClick={() => exportReportExcel(report, storeName)}><Download /> Excel</button><button onClick={() => exportReportPdf(report, storeName)}><FileText /> PDF</button></div></div><div className="period-chips report-filter">{PERIODS.map(([id, label]) => <button key={id} className={period === id ? 'active' : ''} onClick={() => setPeriod(id)}>{label}</button>)}</div><div className="stats desktop-stats"><Stat icon={Receipt} label="Pendapatan" value={formatRp(report.summary.pendapatan)} cls="green" /><Stat icon={ShoppingCart} label="Jumlah Transaksi" value={`${report.summary.jumlahTransaksi} trx`} cls="blue" /><Stat icon={WalletCards} label="Pengeluaran" value={formatRp(report.summary.pengeluaran)} cls="red" /><Stat icon={Package} label="Perkiraan Laba" value={formatRp(report.summary.perkiraanLaba)} cls="amber" /></div><div className="dashboard-grid"><Card title="Menu Terlaris">{report.topProducts.length ? <div className="simple-list">{report.topProducts.map((item) => <div key={item.name} className="simple-row"><div><b>{item.name}</b><small>{item.qty} terjual</small></div><strong>{formatRp(item.total)}</strong></div>)}</div> : <Empty text="Belum ada menu terjual pada periode ini." />}</Card><Card title={`Ringkasan ${report.periodLabel}`}>{report.recentOrders.length ? <div className="desktop-report-table"><table><thead><tr><th>No Struk</th><th>Waktu</th><th className="right">Total</th></tr></thead><tbody>{report.recentOrders.map((order) => <tr key={order.id}><td><b>{receiptNo(order)}</b></td><td>{formatDate(order.timestamp)}</td><td className="right">{formatRp(order.total)}</td></tr>)}</tbody></table></div> : <Empty text="Belum ada transaksi pada periode ini." />}</Card></div><Card title="Modul Desktop Berikutnya"><div className="coming-soon-grid">{DESKTOP_COMING_SOON_ITEMS.map(({ id, label, description, icon: Icon }) => <div className="coming-soon-card" key={id}><Icon /><div><b>{label}</b><small>{description}</small></div><span>Coming Soon</span></div>)}</div></Card></section>;
 }
 function Kasir({ menu, bestSellingIds, cart, setCart, updateCartQty, addToCart, search, setSearch, cartTotal, checkout, setActive }) {
   const [category, setCategory] = useState('Semua');
