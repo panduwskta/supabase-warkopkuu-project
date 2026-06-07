@@ -9,7 +9,7 @@ import {
   type SyncStatus,
 } from '@/lib/db';
 
-import { buildCheckoutRpcPayload, isCheckoutRpcResponse, type CheckoutRpcResponse } from './sync-contract';
+import { buildCheckoutRpcPayload, isCheckoutRpcResponse, type CheckoutRpcErrorResponse, type CheckoutRpcResponse } from './sync-contract';
 
 export type CheckoutSyncResultStatus = 'synced' | 'failed' | 'conflict';
 
@@ -104,9 +104,9 @@ async function markCheckoutGroupFailed(group: CheckoutSyncGroup, error: string):
   return { status: 'failed', error };
 }
 
-async function markCheckoutGroupConflict(group: CheckoutSyncGroup, response: CheckoutRpcResponse): Promise<CheckoutSyncResult> {
+async function markCheckoutGroupConflict(group: CheckoutSyncGroup, response: CheckoutRpcErrorResponse): Promise<CheckoutSyncResult> {
   const timestamp = nowIso();
-  const message = response.ok ? 'Checkout sync conflict.' : response.message;
+  const message = response.message;
   const conflictQueueItems = updateQueueItems(group.queueItems, 'conflict', timestamp, message);
 
   await warunginDb.transaction('rw', [warunginDb.transactions, warunginDb.syncQueue], async () => {
@@ -224,9 +224,11 @@ export async function syncCheckoutTransactionGroup(transactionLocalId: string): 
     return markCheckoutGroupSynced(group, data);
   }
 
-  if (data.code === 'INSUFFICIENT_STOCK' || data.code === 'DUPLICATE_RECEIPT') {
-    return markCheckoutGroupConflict(group, data);
+  const errorResponse = data as CheckoutRpcErrorResponse;
+
+  if (errorResponse.code === 'INSUFFICIENT_STOCK' || errorResponse.code === 'DUPLICATE_RECEIPT') {
+    return markCheckoutGroupConflict(group, errorResponse);
   }
 
-  return markCheckoutGroupFailed(group, data.message);
+  return markCheckoutGroupFailed(group, errorResponse.message);
 }
