@@ -15,6 +15,7 @@ import {
   updateMenuProduct,
 } from '../features/local-app';
 import { shareReceipt } from '../features/receipts/share-receipt';
+import { runSimpleEntitySync } from '../features/sync-engine';
 import type { ReceiptData } from '../features/receipts/types';
 import {
   Coffee,
@@ -358,6 +359,7 @@ function useStore(user) {
   const [expenses, setExpenses] = useState([]);
   const [localStore, setLocalStore] = useState(null);
   const [syncSummary, setSyncSummary] = useState({ pending: 0, syncing: 0, failed: 0, conflict: 0 });
+  const [syncing, setSyncing] = useState(false);
   const [loading, setLoading] = useState(true);
   const userId = user?.id;
 
@@ -412,7 +414,19 @@ function useStore(user) {
     await refresh();
   };
 
-  return { menu, orders, expenses, loading, localStore, syncSummary, addMenu, updateMenu, deleteMenu, checkoutCart, addExpense, deleteExpense, refresh };
+  const syncNow = async () => {
+    if (!localStore) throw new Error('Local store belum siap.');
+    setSyncing(true);
+    try {
+      const result = await runSimpleEntitySync(localStore.localId);
+      await refresh();
+      return result;
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  return { menu, orders, expenses, loading, localStore, syncSummary, syncing, syncNow, addMenu, updateMenu, deleteMenu, checkoutCart, addExpense, deleteExpense, refresh };
 }
 
 function AuthScreen({ auth }) {
@@ -603,6 +617,18 @@ function App() {
       show(error instanceof Error ? error.message : 'Gagal membuat struk PNG', 'error');
     }
   };
+  const handleSyncNow = async () => {
+    try {
+      const result = await store.syncNow();
+      if (result.failed > 0) {
+        show(`${result.failed} data belum berhasil sync. Coba lagi nanti.`, 'error');
+        return;
+      }
+      show(result.synced > 0 ? `${result.synced} data berhasil sync.` : 'Data lokal sudah aman.');
+    } catch (error) {
+      show(error instanceof Error ? error.message : 'Sync gagal.', 'error');
+    }
+  };
   const exportCsv = (ordersToExport = store.orders) => {
     const rows = [['waktu', 'items', 'total'], ...ordersToExport.map((o) => [formatDate(o.timestamp), o.items.map((i) => `${i.qty}x ${i.name}`).join('; '), o.total])];
     const csv = '\uFEFF' + rows.map((r) => r.map((v) => `"${String(v).replaceAll('"', '""')}"`).join(',')).join('\n');
@@ -627,7 +653,7 @@ function App() {
         <button className="logout" onClick={auth.signOut}><LogOut /> Logout</button>
       </aside>
       <main>
-        <header><div><h2>{activeLabel}</h2><p>Kelola penjualan, menu, pesanan, dan pengeluaran warung/kedai.</p></div><div className="header-pills"><span className="pill"><Store /> {auth.user.email}</span><SyncStatusPill summary={store.syncSummary} /></div></header>
+        <header><div><h2>{activeLabel}</h2><p>Kelola penjualan, menu, pesanan, dan pengeluaran warung/kedai.</p></div><div className="header-pills"><span className="pill"><Store /> {auth.user.email}</span><SyncStatusPill summary={store.syncSummary} /><button className="sync-action" type="button" disabled={store.syncing || store.loading} onClick={handleSyncNow}>{store.syncing ? 'Syncing...' : 'Sync'}</button></div></header>
         <div className="mobile-page-title"><h2>{activeLabel}</h2><p>Operasional kedai dari HP, cepat dan simpel.</p></div>
         {store.loading ? <Splash small /> : <>
           {active === 'dashboard' && <Dashboard report={report} period={reportPeriod} setPeriod={setReportPeriod} storeName={currentStoreName} onShareOrder={handleShareOrder} />}
