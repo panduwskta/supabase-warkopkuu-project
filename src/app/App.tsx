@@ -476,7 +476,8 @@ function useStore(user) {
 }
 
 function AuthScreen({ auth }) {
-  const [mode, setMode] = useState('login');
+  const authMode = new URLSearchParams(window.location.search).get('mode');
+  const [mode, setMode] = useState(authMode === 'register' ? 'register' : 'login');
   const [form, setForm] = useState({ name: '', email: '', password: '' });
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
@@ -495,16 +496,6 @@ function AuthScreen({ auth }) {
   };
   return (
     <div className="auth">
-      <section className="desktop-public-hero">
-        <div className="hero-pill"><Monitor /> Dashboard desktop minimal</div>
-        <h2>Warungin POS untuk operasional warung yang lebih rapi.</h2>
-        <p>Catat pesanan dari HP, lalu cek ringkasan usaha dan unduh laporan dari desktop dengan akun yang sama.</p>
-        <div className="hero-points">
-          <span>Pendapatan harian</span>
-          <span>Export Excel/PDF</span>
-          <span>Modul lanjutan Coming Soon</span>
-        </div>
-      </section>
       <div className="auth-card">
         <div className="brand">
           <div className="brand-icon"><Coffee /></div>
@@ -531,6 +522,14 @@ function AuthScreen({ auth }) {
   );
 }
 
+function PublicLanding() {
+  const goToLogin = (mode = 'login') => {
+    window.history.pushState({}, '', mode === 'register' ? '/login?mode=register' : '/login');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  };
+  return <div className="landing-page"><header className="landing-header"><div className="side-brand landing-brand"><div className="brand-icon"><Coffee /></div><div><h1>Warung<span>in</span></h1><p>Kasir warung UMKM Indonesia</p></div></div><nav className="landing-actions"><button type="button" onClick={() => goToLogin('login')}>Masuk</button><button type="button" className="primary compact" onClick={() => goToLogin('register')}>Daftar</button></nav></header><main className="landing-main"><section className="landing-hero"><span className="hero-pill"><Monitor /> Portal resmi Warungin</span><h2>POS sederhana untuk warung yang mau operasionalnya lebih rapi.</h2><p>Warungin membantu pemilik warung mencatat penjualan, mengelola menu, memantau pengeluaran, dan mengunduh laporan usaha tanpa sistem yang ribet.</p><div className="landing-cta"><button type="button" className="primary" onClick={() => goToLogin('register')}>Mulai Daftar</button><button type="button" onClick={() => goToLogin('login')}>Masuk ke App</button></div></section><section className="landing-feature-grid"><div><Receipt /><b>Kasir Harian</b><small>Catat pesanan, pembayaran, kembalian, dan riwayat transaksi.</small></div><div><List /><b>Menu & Stok</b><small>Kelola menu utama dan pantau stok dasar untuk operasional harian.</small></div><div><LayoutDashboard /><b>Laporan Basic</b><small>Lihat pendapatan, transaksi, pengeluaran, laba perkiraan, dan menu terlaris.</small></div><div><Download /><b>Export Laporan</b><small>Unduh laporan Excel/PDF untuk rekap usaha sederhana.</small></div></section></main><footer className="landing-footer"><Credit /></footer></div>;
+}
+
 function App() {
   const auth = useAuth();
   const store = useStore(auth.user);
@@ -543,9 +542,17 @@ function App() {
   const [expense, setExpense] = useState({ name: '', amount: '', category: 'Belanja Bahan' });
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [reportPeriod, setReportPeriod] = useState('today');
+  const [, setPathname] = useState(window.location.pathname);
   const show = (message, type = 'success') => { setToast({ message, type }); setTimeout(() => setToast(null), 2500); };
 
+  useEffect(() => {
+    const updatePath = () => setPathname(window.location.pathname);
+    window.addEventListener('popstate', updatePath);
+    return () => window.removeEventListener('popstate', updatePath);
+  }, []);
+
   if (auth.loading) return <Splash />;
+  if (!auth.user && window.location.pathname === '/') return <PublicLanding />;
   if (!auth.user) return <AuthScreen auth={auth} />;
 
   const report = buildReportData({ orders: store.orders, expenses: store.expenses, menu: store.menu, period: reportPeriod });

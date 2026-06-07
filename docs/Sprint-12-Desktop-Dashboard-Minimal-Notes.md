@@ -15,8 +15,9 @@ Related requirements checked before implementation:
 
 ## Implemented Scope
 
-- Desktop public landing area for unauthenticated users.
-- Existing login/register remains the auth entry for desktop and mobile.
+- Public landing page is available at `/` for unauthenticated visitors.
+- Login/register is available separately at `/login`.
+- Vercel SPA rewrite is configured so direct `/login` visits resolve to the app shell.
 - Authenticated desktop dashboard view from sidebar navigation.
 - Desktop dashboard shows:
   - Pendapatan.
@@ -51,6 +52,8 @@ Related requirements checked before implementation:
 
 - No new dependency was added.
 - The existing auth and report/export logic is reused to avoid broad refactors late in the roadmap.
+- Public landing is intentionally separate from onboarding: landing is pre-auth product information, onboarding remains post-auth setup.
+- `vercel.json` adds a minimal SPA rewrite for direct route visits.
 - `src/features/desktop/` only contains lightweight Coming Soon nav metadata/types.
 - Mobile bottom navigation intentionally does not expose the desktop dashboard.
 
