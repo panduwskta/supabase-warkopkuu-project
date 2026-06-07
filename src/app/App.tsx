@@ -4,6 +4,16 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import writeExcelFile from 'write-excel-file/browser';
 import { DESKTOP_COMING_SOON_ITEMS } from '../features/desktop';
+import {
+  checkoutCartLocal,
+  createExpenseLocal,
+  createMenuProduct,
+  deleteExpenseLocal,
+  deleteMenuProduct,
+  ensureLocalV2Store,
+  loadLocalV2AppData,
+  updateMenuProduct,
+} from '../features/local-app';
 import { shareReceipt } from '../features/receipts/share-receipt';
 import type { ReceiptData } from '../features/receipts/types';
 import {
@@ -346,133 +356,63 @@ function useStore(user) {
   const [menu, setMenu] = useState([]);
   const [orders, setOrders] = useState([]);
   const [expenses, setExpenses] = useState([]);
+  const [localStore, setLocalStore] = useState(null);
+  const [syncSummary, setSyncSummary] = useState({ pending: 0, syncing: 0, failed: 0, conflict: 0 });
   const [loading, setLoading] = useState(true);
   const userId = user?.id;
 
-  const loadLocal = useCallback(() => {
-    const db = readLocal();
-    setMenu(db.menu.filter((x) => x.user_id === userId).sort((a, b) => a.name.localeCompare(b.name)));
-    setOrders(db.orders.filter((x) => x.user_id === userId).sort((a, b) => b.timestamp - a.timestamp));
-    setExpenses(db.expenses.filter((x) => x.user_id === userId).sort((a, b) => b.timestamp - a.timestamp));
-    setLoading(false);
-  }, [userId]);
-
-  const loadCloud = useCallback(async () => {
-    if (!supabase || !userId) return;
-    const [m, o, e] = await Promise.all([
-      supabase.from('menu_items').select('*').order('name'),
-      supabase.from('orders').select('*').order('timestamp', { ascending: false }),
-      supabase.from('expenses').select('*').order('timestamp', { ascending: false }),
-    ]);
-    if (m.error) throw m.error;
-    if (o.error) throw o.error;
-    if (e.error) throw e.error;
-    setMenu(m.data || []);
-    setOrders(o.data || []);
-    setExpenses(e.data || []);
-    setLoading(false);
-  }, [userId]);
-
   const refresh = useCallback(async () => {
-    if (supabase) await loadCloud();
-    else loadLocal();
-  }, [loadCloud, loadLocal]);
+    if (!userId) return;
+    const store = localStore ?? (await ensureLocalV2Store(user));
+    const data = await loadLocalV2AppData(store.localId);
+    setLocalStore(store);
+    setMenu(data.menu);
+    setOrders(data.orders);
+    setExpenses(data.expenses);
+    setSyncSummary(data.syncSummary);
+    setLoading(false);
+  }, [localStore, user, userId]);
 
   useEffect(() => {
     if (!userId) return;
     setLoading(true);
     refresh().catch(() => setLoading(false));
-
-    if (supabase) {
-      const channel = supabase
-        .channel(`warkop-live-${userId}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, () => refresh())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => refresh())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, () => refresh())
-        .subscribe();
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    }
-
-    const on = () => loadLocal();
-    window.addEventListener('warkop-local-change', on);
-    return () => window.removeEventListener('warkop-local-change', on);
-  }, [userId, refresh, loadLocal]);
+  }, [userId, refresh]);
 
   const addMenu = async (item) => {
-    if (supabase) {
-      const { data, error } = await supabase.from('menu_items').insert(item).select('*').single();
-      if (error) throw error;
-      if (data) setMenu((prev) => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
-    } else {
-      const db = readLocal();
-      db.menu.push({ id: uid(), user_id: userId, ...item, created_at: now() });
-      writeLocal(db);
-    }
+    if (!localStore) throw new Error('Local store belum siap.');
+    await createMenuProduct(localStore.localId, item);
+    await refresh();
   };
 
   const updateMenu = async (id, item) => {
-    if (supabase) {
-      const { data, error } = await supabase.from('menu_items').update(item).eq('id', id).select('*').single();
-      if (error) throw error;
-      if (data) setMenu((prev) => prev.map((x) => (x.id === id ? data : x)).sort((a, b) => a.name.localeCompare(b.name)));
-    } else {
-      const db = readLocal();
-      db.menu = db.menu.map((x) => (x.id === id && x.user_id === userId ? { ...x, ...item } : x));
-      writeLocal(db);
-    }
+    await updateMenuProduct(id, item);
+    await refresh();
   };
 
   const deleteMenu = async (id) => {
-    if (supabase) {
-      const { error } = await supabase.from('menu_items').delete().eq('id', id);
-      if (error) throw error;
-      setMenu((prev) => prev.filter((x) => x.id !== id));
-    } else {
-      const db = readLocal();
-      db.menu = db.menu.filter((x) => !(x.id === id && x.user_id === userId));
-      writeLocal(db);
-    }
+    await deleteMenuProduct(id);
+    await refresh();
   };
 
-  const addOrder = async (order) => {
-    if (supabase) {
-      const { data, error } = await supabase.from('orders').insert(order).select('*').single();
-      if (error) throw error;
-      if (data) setOrders((prev) => [data, ...prev].sort((a, b) => b.timestamp - a.timestamp));
-    } else {
-      const db = readLocal();
-      db.orders.push({ id: uid(), user_id: userId, ...order });
-      writeLocal(db);
-    }
+  const checkoutCart = async (cart, paymentAmount) => {
+    if (!localStore) throw new Error('Local store belum siap.');
+    await checkoutCartLocal(localStore, cart, paymentAmount);
+    await refresh();
   };
 
   const addExpense = async (exp) => {
-    if (supabase) {
-      const { data, error } = await supabase.from('expenses').insert(exp).select('*').single();
-      if (error) throw error;
-      if (data) setExpenses((prev) => [data, ...prev].sort((a, b) => b.timestamp - a.timestamp));
-    } else {
-      const db = readLocal();
-      db.expenses.push({ id: uid(), user_id: userId, ...exp });
-      writeLocal(db);
-    }
+    if (!localStore) throw new Error('Local store belum siap.');
+    await createExpenseLocal(localStore.localId, exp);
+    await refresh();
   };
 
   const deleteExpense = async (id) => {
-    if (supabase) {
-      const { error } = await supabase.from('expenses').delete().eq('id', id);
-      if (error) throw error;
-      setExpenses((prev) => prev.filter((x) => x.id !== id));
-    } else {
-      const db = readLocal();
-      db.expenses = db.expenses.filter((x) => !(x.id === id && x.user_id === userId));
-      writeLocal(db);
-    }
+    await deleteExpenseLocal(id);
+    await refresh();
   };
 
-  return { menu, orders, expenses, loading, addMenu, updateMenu, deleteMenu, addOrder, addExpense, deleteExpense, refresh };
+  return { menu, orders, expenses, loading, localStore, syncSummary, addMenu, updateMenu, deleteMenu, checkoutCart, addExpense, deleteExpense, refresh };
 }
 
 function AuthScreen({ auth }) {
@@ -537,7 +477,7 @@ function App() {
   const [cart, setCart] = useState([]);
   const [search, setSearch] = useState('');
   const [toast, setToast] = useState(null);
-  const [newMenu, setNewMenu] = useState({ name: '', price: '', category: 'Minuman', stock: '' });
+  const [newMenu, setNewMenu] = useState({ name: '', price: '', hpp: '', category: 'Minuman', stock: '' });
   const [edit, setEdit] = useState(null);
   const [expense, setExpense] = useState({ name: '', amount: '', category: 'Belanja Bahan' });
   const [checkoutOpen, setCheckoutOpen] = useState(false);
@@ -600,34 +540,19 @@ function App() {
       show('Uang diterima kurang dari total belanja', 'error');
       return;
     }
-    const createdAt = now();
-    const no = `WRG-${createdAt.toString(36).toUpperCase()}`;
-    const itemsWithMeta = cart.map((item) => ({
-      ...item,
-      _receipt_no: no,
-      _paid_amount: paidNumber,
-      _change_amount: paidNumber - cartTotal,
-    }));
     try {
-      await store.addOrder({ items: itemsWithMeta, total: cartTotal, timestamp: createdAt });
-      await Promise.all(cart.map((cartItem) => {
-        const latest = store.menu.find((menuItem) => menuItem.id === cartItem.id);
-        if (latest?.stock == null) return Promise.resolve();
-        const nextStock = Math.max(0, Number(latest.stock) - cartItem.qty);
-        return store.updateMenu(cartItem.id, { stock: nextStock });
-      }));
+      await store.checkoutCart(cart, paidNumber);
       setCart([]);
       setCheckoutOpen(false);
-      await store.refresh();
-      show('Pesanan berhasil disimpan & stok diperbarui!');
+      show('Pesanan tersimpan di perangkat & menunggu sync cloud.');
     } catch (e) { show(e.message, 'error'); }
   };
   const addMenu = async (e) => {
     e.preventDefault();
     if (!newMenu.name || !newMenu.price) return show('Nama dan harga wajib diisi', 'error');
     try {
-      await store.addMenu({ name: newMenu.name.trim(), price: Number(newMenu.price), category: newMenu.category, stock: newMenu.stock ? Number(newMenu.stock) : null });
-      setNewMenu({ name: '', price: '', category: 'Minuman', stock: '' });
+      await store.addMenu({ name: newMenu.name.trim(), price: Number(newMenu.price), hpp: Number(newMenu.hpp || 0), category: newMenu.category, stock: newMenu.stock ? Number(newMenu.stock) : 0 });
+      setNewMenu({ name: '', price: '', hpp: '', category: 'Minuman', stock: '' });
       store.refresh();
       show('Menu berhasil ditambahkan');
     } catch (x) { show(x.message, 'error'); }
@@ -635,7 +560,7 @@ function App() {
   const saveEdit = async (e) => {
     e.preventDefault();
     try {
-      await store.updateMenu(edit.id, { name: edit.name, price: Number(edit.price), category: edit.category, stock: edit.stock === '' ? null : Number(edit.stock) });
+      await store.updateMenu(edit.id, { name: edit.name, price: Number(edit.price), hpp: Number(edit.hpp || 0), category: edit.category, stock: edit.stock === '' ? 0 : Number(edit.stock) });
       setEdit(null);
       store.refresh();
       show('Menu diperbarui');
@@ -651,7 +576,7 @@ function App() {
       show('Pengeluaran dicatat');
     } catch (x) { show(x.message, 'error'); }
   };
-  const currentStoreName = auth.user.user_metadata?.name || auth.user.name || 'Warungin';
+  const currentStoreName = store.localStore?.name || auth.user.user_metadata?.name || auth.user.name || 'Warungin';
   const orderToReceiptData = (order): ReceiptData => ({
     transactionLocalId: String(order.id || order.timestamp),
     storeName: currentStoreName,
@@ -702,7 +627,7 @@ function App() {
         <button className="logout" onClick={auth.signOut}><LogOut /> Logout</button>
       </aside>
       <main>
-        <header><div><h2>{activeLabel}</h2><p>Kelola penjualan, menu, pesanan, dan pengeluaran warung/kedai.</p></div><span className="pill"><Store /> {auth.user.email}</span></header>
+        <header><div><h2>{activeLabel}</h2><p>Kelola penjualan, menu, pesanan, dan pengeluaran warung/kedai.</p></div><div className="header-pills"><span className="pill"><Store /> {auth.user.email}</span><SyncStatusPill summary={store.syncSummary} /></div></header>
         <div className="mobile-page-title"><h2>{activeLabel}</h2><p>Operasional kedai dari HP, cepat dan simpel.</p></div>
         {store.loading ? <Splash small /> : <>
           {active === 'dashboard' && <Dashboard report={report} period={reportPeriod} setPeriod={setReportPeriod} storeName={currentStoreName} onShareOrder={handleShareOrder} />}
@@ -714,7 +639,7 @@ function App() {
         </>}
         <div className="main-credit"><Credit /></div>
         {checkoutOpen && <CheckoutModal total={cartTotal} onClose={() => setCheckoutOpen(false)} onPay={processCheckout} />}
-        {edit && <div className="modal" onClick={() => setEdit(null)}><form className="modal-card form" onSubmit={saveEdit} onClick={(e) => e.stopPropagation()}><h3>Edit Menu</h3><label>Nama<input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /></label><label>Harga<input type="number" value={edit.price} onChange={(e) => setEdit({ ...edit, price: e.target.value })} /></label><label>Kategori<select value={edit.category} onChange={(e) => setEdit({ ...edit, category: e.target.value })}>{['Minuman', 'Makanan', 'Cemilan', 'Paket'].map((x) => <option key={x}>{x}</option>)}</select></label><label>Stok opsional<input type="number" value={edit.stock ?? ''} onChange={(e) => setEdit({ ...edit, stock: e.target.value })} /></label><button className="primary">Simpan Perubahan</button></form></div>}
+        {edit && <div className="modal" onClick={() => setEdit(null)}><form className="modal-card form" onSubmit={saveEdit} onClick={(e) => e.stopPropagation()}><h3>Edit Menu</h3><label>Nama<input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /></label><label>Harga<input type="number" value={edit.price} onChange={(e) => setEdit({ ...edit, price: e.target.value })} /></label><label>HPP / Modal<input type="number" min="0" value={edit.hpp ?? ''} onChange={(e) => setEdit({ ...edit, hpp: e.target.value })} /></label><label>Kategori<select value={edit.category} onChange={(e) => setEdit({ ...edit, category: e.target.value })}>{['Minuman', 'Makanan', 'Cemilan', 'Paket'].map((x) => <option key={x}>{x}</option>)}</select></label><label>Stok<input type="number" value={edit.stock ?? ''} onChange={(e) => setEdit({ ...edit, stock: e.target.value })} /></label><button className="primary">Simpan Perubahan</button></form></div>}
       </main>
       <MobileBottomNav active={active} setActive={setActive} />
     </div>
@@ -730,6 +655,15 @@ function MobileTopBar({ activeLabel, user }) { return <div className="mobile-top
 function MobileBottomNav({ active, setActive }) { return <div className="bottom-nav">{NAV_ITEMS.map(([id, label, Icon]) => <button key={id} onClick={() => setActive(id)} className={active === id ? 'active' : ''}><Icon /><span>{label}</span></button>)}</div>; }
 function Credit({ compact = false }) { return <div className={compact ? 'credit compact' : 'credit'}>Built by <b>Takis Agency</b><span> · </span>Crafted by <b>Pandu W Aji</b></div>; }
 function Splash({ small = false }) { return <div className={small ? 'splash small' : 'splash'}><Coffee /><p>Menyiapkan Kedai...</p></div>; }
+function SyncStatusPill({ summary }) {
+  const pending = Number(summary?.pending || 0);
+  const syncing = Number(summary?.syncing || 0);
+  const failed = Number(summary?.failed || 0);
+  const conflict = Number(summary?.conflict || 0);
+  const label = conflict ? `${conflict} konflik` : failed ? `${failed} gagal sync` : syncing ? `${syncing} syncing` : pending ? `${pending} menunggu sync` : 'Tersimpan lokal';
+  const cls = conflict || failed ? 'danger' : pending || syncing ? 'pending' : 'local';
+  return <span className={`pill sync-pill ${cls}`}>{label}</span>;
+}
 function Stat({ icon: Icon, label, value, cls = '' }) { return <div className="stat"><div className={`stat-icon ${cls}`}><Icon /></div><div><p>{label}</p><h3>{value}</h3></div></div>; }
 function Dashboard({ report, period, setPeriod, storeName, onShareOrder }) {
   const exportActions = <div className="export-actions"><button onClick={() => exportReportCsv(report)}><Download /> CSV</button><button onClick={() => exportReportExcel(report, storeName)}><Download /> Excel</button><button onClick={() => exportReportPdf(report, storeName)}><FileText /> PDF</button></div>;
@@ -747,8 +681,8 @@ function Kasir({ menu, bestSellingIds, cart, setCart, updateCartQty, addToCart, 
 }
 function Menu({ menu, newMenu, setNewMenu, addMenu, del, setEdit }) {
   const [addOpen, setAddOpen] = useState(false);
-  const form = <form onSubmit={(e) => { addMenu(e); setAddOpen(false); }} className="grid-form"><label>Nama Menu<input value={newMenu.name} onChange={(e) => setNewMenu({ ...newMenu, name: e.target.value })} placeholder="Kopi Hitam" /></label><label>Harga (Rp)<input type="number" min="0" value={newMenu.price} onChange={(e) => setNewMenu({ ...newMenu, price: e.target.value })} placeholder="5000" /></label><label>Kategori<select value={newMenu.category} onChange={(e) => setNewMenu({ ...newMenu, category: e.target.value })}>{['Minuman', 'Makanan', 'Cemilan', 'Paket'].map((x) => <option key={x}>{x}</option>)}</select></label><label>Stok opsional<input type="number" min="0" value={newMenu.stock} onChange={(e) => setNewMenu({ ...newMenu, stock: e.target.value })} placeholder="Opsional" /></label><button className="dark"><Plus /> Simpan</button></form>;
-  return <section className="space"><div className="add-menu-card"><Card title="Tambah Menu Baru">{form}</Card></div><button className="fab-menu" onClick={() => setAddOpen(true)}><Plus /> Menu</button>{addOpen && <div className="modal" onClick={() => setAddOpen(false)}><div className="modal-card" onClick={(e) => e.stopPropagation()}><div className="modal-head"><h3>Tambah Menu Baru</h3><button onClick={() => setAddOpen(false)}><X /></button></div>{form}</div></div>}<Card title={`Daftar Menu (${menu.length})`}>{menu.length ? <><div className="menu-list-mobile">{menu.map((i) => <div className="list-card" key={i.id}><div><b>{i.name}</b><small>{i.category} · {formatRp(i.price)} · Stok {i.stock ?? '—'}</small></div><div><button onClick={() => setEdit(i)}><Pencil /></button><button className="danger" onClick={() => del(i.id)}><Trash2 /></button></div></div>)}</div><table className="desktop-table"><thead><tr><th>Nama</th><th>Kategori</th><th>Harga</th><th>Stok</th><th>Aksi</th></tr></thead><tbody>{menu.map((i) => <tr key={i.id}><td><b>{i.name}</b></td><td><span className="badge">{i.category}</span></td><td>{formatRp(i.price)}</td><td>{i.stock ?? '—'}</td><td><button onClick={() => setEdit(i)}><Pencil /></button><button className="danger" onClick={() => del(i.id)}><Trash2 /></button></td></tr>)}</tbody></table></> : <Empty text="Belum ada data menu." />}</Card></section>;
+  const form = <form onSubmit={(e) => { addMenu(e); setAddOpen(false); }} className="grid-form"><label>Nama Menu<input value={newMenu.name} onChange={(e) => setNewMenu({ ...newMenu, name: e.target.value })} placeholder="Kopi Hitam" /></label><label>Harga (Rp)<input type="number" min="0" value={newMenu.price} onChange={(e) => setNewMenu({ ...newMenu, price: e.target.value })} placeholder="5000" /></label><label>HPP / Modal<input type="number" min="0" value={newMenu.hpp} onChange={(e) => setNewMenu({ ...newMenu, hpp: e.target.value })} placeholder="Opsional" /></label><label>Kategori<select value={newMenu.category} onChange={(e) => setNewMenu({ ...newMenu, category: e.target.value })}>{['Minuman', 'Makanan', 'Cemilan', 'Paket'].map((x) => <option key={x}>{x}</option>)}</select></label><label>Stok<input type="number" min="0" value={newMenu.stock} onChange={(e) => setNewMenu({ ...newMenu, stock: e.target.value })} placeholder="0" /></label><button className="dark"><Plus /> Simpan</button></form>;
+  return <section className="space"><div className="add-menu-card"><Card title="Tambah Menu Baru">{form}</Card></div><button className="fab-menu" onClick={() => setAddOpen(true)}><Plus /> Menu</button>{addOpen && <div className="modal" onClick={() => setAddOpen(false)}><div className="modal-card" onClick={(e) => e.stopPropagation()}><div className="modal-head"><h3>Tambah Menu Baru</h3><button onClick={() => setAddOpen(false)}><X /></button></div>{form}</div></div>}<Card title={`Daftar Menu (${menu.length})`}>{menu.length ? <><div className="menu-list-mobile">{menu.map((i) => <div className="list-card" key={i.id}><div><b>{i.name}</b><small>{i.category} · {formatRp(i.price)} · HPP {formatRp(i.hpp || 0)} · Stok {i.stock ?? 0}</small></div><div><button onClick={() => setEdit(i)}><Pencil /></button><button className="danger" onClick={() => del(i.id)}><Trash2 /></button></div></div>)}</div><table className="desktop-table"><thead><tr><th>Nama</th><th>Kategori</th><th>Harga</th><th>HPP</th><th>Stok</th><th>Aksi</th></tr></thead><tbody>{menu.map((i) => <tr key={i.id}><td><b>{i.name}</b></td><td><span className="badge">{i.category}</span></td><td>{formatRp(i.price)}</td><td>{formatRp(i.hpp || 0)}</td><td>{i.stock ?? 0}</td><td><button onClick={() => setEdit(i)}><Pencil /></button><button className="danger" onClick={() => del(i.id)}><Trash2 /></button></td></tr>)}</tbody></table></> : <Empty text="Belum ada data menu." />}</Card></section>;
 }
 function Pesanan({ orders, exportCsv, onShareOrder }) {
   const [period, setPeriod] = useState('all');
