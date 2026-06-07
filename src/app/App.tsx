@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import writeExcelFile from 'write-excel-file/browser';
 import { shareReceipt } from '../features/receipts/share-receipt';
 import type { ReceiptData } from '../features/receipts/types';
 import {
@@ -17,6 +20,7 @@ import {
   LogOut,
   Store,
   Download,
+  FileText,
   Pencil,
   Package,
   WalletCards,
@@ -37,6 +41,14 @@ const formatDate = (timestamp) =>
 const todayStart = () => new Date().setHours(0, 0, 0, 0);
 const weekStart = () => { const d = new Date(); const day = d.getDay() || 7; d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - day + 1); return d.getTime(); };
 const monthStart = () => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).getTime(); };
+const PERIODS = [
+  ['today', 'Hari ini'],
+  ['week', 'Minggu ini'],
+  ['month', 'Bulan ini'],
+  ['all', 'Semua'],
+];
+const periodStart = (period) => (period === 'today' ? todayStart() : period === 'week' ? weekStart() : period === 'month' ? monthStart() : 0);
+const periodLabel = (period) => PERIODS.find(([id]) => id === period)?.[1] || 'Semua';
 const receiptNo = (order) => order.items?.[0]?._receipt_no || `WRG-${String(order.id || order.timestamp).slice(0, 8).toUpperCase()}`;
 const paidAmount = (order) => Number(order.items?.[0]?._paid_amount || 0);
 const changeAmount = (order) => Number(order.items?.[0]?._change_amount || 0);
@@ -61,6 +73,178 @@ const safeJson = (v, fallback) => {
     return fallback;
   }
 };
+
+const downloadBlob = (blob, filename) => {
+  const a = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+const orderItemCost = (item) => Number(item.hppSnapshot ?? item.hpp ?? item.cost ?? item.modal ?? 0) * Number(item.qty || item.quantity || 0);
+const orderItemQty = (item) => Number(item.qty || item.quantity || 0);
+const orderItemSubtotal = (item) => Number(item.subtotal ?? Number(item.price || 0) * orderItemQty(item));
+
+function buildReportData({ orders, expenses, menu, period }) {
+  const from = periodStart(period);
+  const filteredOrders = orders.filter((order) => Number(order.timestamp || 0) >= from);
+  const filteredExpenses = expenses.filter((item) => Number(item.timestamp || 0) >= from);
+  const pendapatan = filteredOrders.reduce((sum, order) => sum + Number(order.total || 0), 0);
+  const pengeluaran = filteredExpenses.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const modal = filteredOrders.reduce((sum, order) => sum + (order.items || []).reduce((itemSum, item) => itemSum + orderItemCost(item), 0), 0);
+  const productMap = new Map();
+
+  filteredOrders.forEach((order) => {
+    (order.items || []).forEach((item) => {
+      const key = item.id || item.name;
+      const current = productMap.get(key) || { name: item.name, qty: 0, total: 0 };
+      current.qty += orderItemQty(item);
+      current.total += orderItemSubtotal(item);
+      productMap.set(key, current);
+    });
+  });
+
+  const topProducts = Array.from(productMap.values()).sort((a, b) => b.qty - a.qty || b.total - a.total).slice(0, 5);
+  const lowStock = menu.filter((item) => item.stock != null && Number(item.stock) <= 5).sort((a, b) => Number(a.stock || 0) - Number(b.stock || 0)).slice(0, 6);
+
+  return {
+    period,
+    periodLabel: periodLabel(period),
+    generatedAt: new Date(),
+    orders: filteredOrders,
+    expenses: filteredExpenses,
+    summary: {
+      pendapatan,
+      jumlahTransaksi: filteredOrders.length,
+      pengeluaran,
+      perkiraanLaba: pendapatan - modal - pengeluaran,
+      modal,
+    },
+    topProducts,
+    lowStock,
+    recentOrders: filteredOrders.slice(0, 5),
+  };
+}
+
+function exportReportCsv(report) {
+  const rows = [
+    ['Periode', report.periodLabel],
+    ['Waktu unduh', formatDate(report.generatedAt.getTime())],
+    [],
+    ['Ringkasan'],
+    ['Pendapatan', report.summary.pendapatan],
+    ['Jumlah Transaksi', report.summary.jumlahTransaksi],
+    ['Pengeluaran', report.summary.pengeluaran],
+    ['Perkiraan Laba', report.summary.perkiraanLaba],
+    [],
+    ['Transaksi'],
+    ['No Struk', 'Waktu', 'Item', 'Total'],
+    ...report.orders.map((order) => [receiptNo(order), formatDate(order.timestamp), (order.items || []).map((item) => `${orderItemQty(item)}x ${item.name}`).join('; '), order.total]),
+    [],
+    ['Pengeluaran'],
+    ['Waktu', 'Nama', 'Kategori', 'Nominal'],
+    ...report.expenses.map((item) => [formatDate(item.timestamp), item.name, item.category, item.amount]),
+  ];
+  const csv = '\uFEFF' + rows.map((row) => row.map((value) => `"${String(value ?? '').replaceAll('"', '""')}"`).join(',')).join('\n');
+  downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `laporan-warungin-${report.period}-${new Date().toISOString().slice(0, 10)}.csv`);
+}
+
+async function exportReportExcel(report, storeName) {
+  const headerCell = (value) => ({ value, fontWeight: 'bold', backgroundColor: '#DCFCE7' });
+  await writeExcelFile([
+    {
+      sheet: 'Ringkasan',
+      data: [
+    ['Warungin POS'],
+    ['Nama usaha', storeName],
+    ['Periode', report.periodLabel],
+    ['Waktu unduh', formatDate(report.generatedAt.getTime())],
+    [],
+    [headerCell('Ringkasan'), headerCell('Nominal/Jumlah')],
+    ['Pendapatan', report.summary.pendapatan],
+    ['Jumlah Transaksi', report.summary.jumlahTransaksi],
+    ['Pengeluaran', report.summary.pengeluaran],
+    ['Perkiraan Laba', report.summary.perkiraanLaba],
+      ],
+      columns: [{ width: 28 }, { width: 20 }],
+    },
+    {
+      sheet: 'Transaksi',
+      data: [[headerCell('No Struk'), headerCell('Waktu'), headerCell('Item'), headerCell('Total'), headerCell('Dibayar'), headerCell('Kembalian')], ...report.orders.map((order) => [receiptNo(order), formatDate(order.timestamp), (order.items || []).map((item) => `${orderItemQty(item)}x ${item.name}`).join('; '), Number(order.total || 0), paidAmount(order), changeAmount(order)])],
+      columns: [{ width: 20 }, { width: 24 }, { width: 44 }, { width: 16 }, { width: 16 }, { width: 16 }],
+    },
+    {
+      sheet: 'Item Transaksi',
+      data: [[headerCell('No Struk'), headerCell('Waktu'), headerCell('Menu'), headerCell('Jumlah'), headerCell('Harga'), headerCell('Total')], ...report.orders.flatMap((order) => (order.items || []).map((item) => [receiptNo(order), formatDate(order.timestamp), item.name, orderItemQty(item), Number(item.price || 0), orderItemSubtotal(item)]))],
+      columns: [{ width: 20 }, { width: 24 }, { width: 28 }, { width: 12 }, { width: 16 }, { width: 16 }],
+    },
+    {
+      sheet: 'Pengeluaran',
+      data: [[headerCell('Waktu'), headerCell('Nama'), headerCell('Kategori'), headerCell('Nominal')], ...report.expenses.map((item) => [formatDate(item.timestamp), item.name, item.category, Number(item.amount || 0)])],
+      columns: [{ width: 24 }, { width: 28 }, { width: 20 }, { width: 16 }],
+    },
+    {
+      sheet: 'Stok Menipis',
+      data: [[headerCell('Menu'), headerCell('Kategori'), headerCell('Stok'), headerCell('Harga')], ...report.lowStock.map((item) => [item.name, item.category, Number(item.stock || 0), Number(item.price || 0)])],
+      columns: [{ width: 28 }, { width: 20 }, { width: 12 }, { width: 16 }],
+    },
+  ]).toFile(`laporan-warungin-${report.period}-${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+function exportReportPdf(report, storeName) {
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const margin = 40;
+  doc.setTextColor(30, 41, 59);
+  doc.setFontSize(18);
+  doc.text('Laporan Warungin POS', margin, 44);
+  doc.setFontSize(10);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`${storeName} · ${report.periodLabel} · Diunduh ${formatDate(report.generatedAt.getTime())}`, margin, 62);
+  autoTable(doc, {
+    startY: 86,
+    head: [['Ringkasan', 'Nilai']],
+    body: [
+      ['Pendapatan', formatRp(report.summary.pendapatan)],
+      ['Jumlah Transaksi', `${report.summary.jumlahTransaksi} transaksi`],
+      ['Pengeluaran', formatRp(report.summary.pengeluaran)],
+      ['Perkiraan Laba', formatRp(report.summary.perkiraanLaba)],
+    ],
+    styles: { fontSize: 10 },
+    headStyles: { fillColor: [5, 150, 105] },
+    margin: { left: margin, right: margin },
+  });
+  autoTable(doc, {
+    startY: (doc as any).lastAutoTable.finalY + 22,
+    head: [['Menu Terlaris', 'Terjual', 'Pendapatan']],
+    body: report.topProducts.length ? report.topProducts.map((item) => [item.name, item.qty, formatRp(item.total)]) : [['Belum ada data', '-', '-']],
+    styles: { fontSize: 9 },
+    headStyles: { fillColor: [245, 158, 11] },
+    margin: { left: margin, right: margin },
+  });
+  autoTable(doc, {
+    startY: (doc as any).lastAutoTable.finalY + 22,
+    head: [['Transaksi Terbaru', 'Waktu', 'Total']],
+    body: report.recentOrders.length ? report.recentOrders.map((order) => [receiptNo(order), formatDate(order.timestamp), formatRp(order.total)]) : [['Belum ada transaksi', '-', '-']],
+    styles: { fontSize: 9 },
+    headStyles: { fillColor: [30, 41, 59] },
+    margin: { left: margin, right: margin },
+  });
+  autoTable(doc, {
+    startY: (doc as any).lastAutoTable.finalY + 22,
+    head: [['Pengeluaran', 'Kategori', 'Nominal']],
+    body: report.expenses.slice(0, 8).length ? report.expenses.slice(0, 8).map((item) => [item.name, item.category, formatRp(item.amount)]) : [['Belum ada pengeluaran', '-', '-']],
+    styles: { fontSize: 9 },
+    headStyles: { fillColor: [220, 38, 38] },
+    margin: { left: margin, right: margin },
+  });
+  const pageHeight = doc.internal.pageSize.getHeight();
+  doc.setFontSize(9);
+  doc.setTextColor(148, 163, 184);
+  doc.text('Built by Takis Agency · Crafted by Pandu W Aji', margin, pageHeight - 28);
+  doc.save(`laporan-warungin-${report.period}-${new Date().toISOString().slice(0, 10)}.pdf`);
+}
 
 const NAV_ITEMS = [
   ['dashboard', 'Dashboard', LayoutDashboard],
@@ -346,15 +530,13 @@ function App() {
   const [edit, setEdit] = useState(null);
   const [expense, setExpense] = useState({ name: '', amount: '', category: 'Belanja Bahan' });
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [reportPeriod, setReportPeriod] = useState('today');
   const show = (message, type = 'success') => { setToast({ message, type }); setTimeout(() => setToast(null), 2500); };
 
   if (auth.loading) return <Splash />;
   if (!auth.user) return <AuthScreen auth={auth} />;
 
-  const todaysOrders = store.orders.filter((o) => o.timestamp >= todayStart());
-  const revenue = todaysOrders.reduce((s, o) => s + Number(o.total || 0), 0);
-  const todayExpense = store.expenses.filter((e) => e.timestamp >= todayStart()).reduce((s, e) => s + Number(e.amount || 0), 0);
-  const profit = revenue - todayExpense;
+  const report = buildReportData({ orders: store.orders, expenses: store.expenses, menu: store.menu, period: reportPeriod });
   const addToCart = (item) => setCart((prev) => {
     const existingQty = prev.find((i) => i.id === item.id)?.qty || 0;
     if (item.stock != null && existingQty + 1 > Number(item.stock)) {
@@ -477,13 +659,10 @@ function App() {
       show(error instanceof Error ? error.message : 'Gagal membuat struk PNG', 'error');
     }
   };
-  const exportCsv = () => {
-    const rows = [['waktu', 'items', 'total'], ...store.orders.map((o) => [formatDate(o.timestamp), o.items.map((i) => `${i.qty}x ${i.name}`).join('; '), o.total])];
+  const exportCsv = (ordersToExport = store.orders) => {
+    const rows = [['waktu', 'items', 'total'], ...ordersToExport.map((o) => [formatDate(o.timestamp), o.items.map((i) => `${i.qty}x ${i.name}`).join('; '), o.total])];
     const csv = '\uFEFF' + rows.map((r) => r.map((v) => `"${String(v).replaceAll('"', '""')}"`).join(',')).join('\n');
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-    a.download = `transaksi-warkop-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
+    downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `transaksi-warungin-${new Date().toISOString().slice(0, 10)}.csv`);
   };
   const activeLabel = NAV_ITEMS.find((n) => n[0] === active)?.[1];
   const salesCount = store.orders.reduce((acc, order) => {
@@ -507,7 +686,7 @@ function App() {
         <header><div><h2>{activeLabel}</h2><p>Kelola penjualan, menu, pesanan, dan pengeluaran warung/kedai.</p></div><span className="pill"><Store /> {auth.user.email}</span></header>
         <div className="mobile-page-title"><h2>{activeLabel}</h2><p>Operasional kedai dari HP, cepat dan simpel.</p></div>
         {store.loading ? <Splash small /> : <>
-          {active === 'dashboard' && <Dashboard revenue={revenue} orders={todaysOrders.length} expense={todayExpense} profit={profit} latest={store.orders} onShareOrder={handleShareOrder} />}
+          {active === 'dashboard' && <Dashboard report={report} period={reportPeriod} setPeriod={setReportPeriod} storeName={currentStoreName} onShareOrder={handleShareOrder} />}
           {active === 'kasir' && <Kasir menu={store.menu} bestSellingIds={bestSellingIds} cart={cart} setCart={setCart} updateCartQty={updateCartQty} addToCart={addToCart} search={search} setSearch={setSearch} cartTotal={cartTotal} checkout={checkout} setActive={setActive} />}
           {active === 'menu' && <Menu menu={store.menu} newMenu={newMenu} setNewMenu={setNewMenu} addMenu={addMenu} del={async (id) => { await store.deleteMenu(id); setCart((c) => c.filter((i) => i.id !== id)); store.refresh(); show('Menu dihapus'); }} setEdit={setEdit} />}
           {active === 'pesanan' && <Pesanan orders={store.orders} exportCsv={exportCsv} onShareOrder={handleShareOrder} />}
@@ -532,7 +711,10 @@ function MobileBottomNav({ active, setActive }) { return <div className="bottom-
 function Credit({ compact = false }) { return <div className={compact ? 'credit compact' : 'credit'}>Built by <b>Takis Agency</b><span> · </span>Crafted by <b>Pandu W Aji</b></div>; }
 function Splash({ small }) { return <div className={small ? 'splash small' : 'splash'}><Coffee /><p>Menyiapkan Kedai...</p></div>; }
 function Stat({ icon: Icon, label, value, cls = '' }) { return <div className="stat"><div className={`stat-icon ${cls}`}><Icon /></div><div><p>{label}</p><h3>{value}</h3></div></div>; }
-function Dashboard({ revenue, orders, expense, profit, latest, onShareOrder }) { return <section className="space"><h2>Ringkasan Hari Ini</h2><div className="stats"><Stat icon={Receipt} label="Pendapatan" value={formatRp(revenue)} cls="green" /><Stat icon={ShoppingCart} label="Pesanan" value={`${orders} trx`} cls="blue" /><Stat icon={WalletCards} label="Pengeluaran" value={formatRp(expense)} cls="red" /><Stat icon={Package} label="Estimasi Laba" value={formatRp(profit)} cls="amber" /></div><Card title="Transaksi Terakhir">{latest.slice(0, 5).length ? <div className="mobile-card-list">{latest.slice(0, 5).map((o) => <OrderCard key={o.id} order={o} onShareOrder={onShareOrder} />)}</div> : <Empty text="Belum ada transaksi hari ini." />}</Card></section>; }
+function Dashboard({ report, period, setPeriod, storeName, onShareOrder }) {
+  const exportActions = <div className="export-actions"><button onClick={() => exportReportCsv(report)}><Download /> CSV</button><button onClick={() => exportReportExcel(report, storeName)}><Download /> Excel</button><button onClick={() => exportReportPdf(report, storeName)}><FileText /> PDF</button></div>;
+  return <section className="space"><div className="dashboard-title"><div><h2>Ringkasan {report.periodLabel}</h2><p>Pantau pendapatan, transaksi, pengeluaran, dan stok menipis.</p></div>{exportActions}</div><div className="period-chips report-filter">{PERIODS.map(([id, label]) => <button key={id} className={period === id ? 'active' : ''} onClick={() => setPeriod(id)}>{label}</button>)}</div><div className="stats"><Stat icon={Receipt} label="Pendapatan" value={formatRp(report.summary.pendapatan)} cls="green" /><Stat icon={ShoppingCart} label="Jumlah Transaksi" value={`${report.summary.jumlahTransaksi} trx`} cls="blue" /><Stat icon={WalletCards} label="Pengeluaran" value={formatRp(report.summary.pengeluaran)} cls="red" /><Stat icon={Package} label="Perkiraan Laba" value={formatRp(report.summary.perkiraanLaba)} cls="amber" /></div><div className="dashboard-grid"><Card title="Menu Terlaris">{report.topProducts.length ? <div className="simple-list">{report.topProducts.map((item) => <div key={item.name} className="simple-row"><div><b>{item.name}</b><small>{item.qty} terjual</small></div><strong>{formatRp(item.total)}</strong></div>)}</div> : <Empty text="Belum ada menu terjual pada periode ini." />}</Card><Card title="Stok Menipis">{report.lowStock.length ? <div className="simple-list">{report.lowStock.map((item) => <div key={item.id} className="simple-row"><div><b>{item.name}</b><small>{item.category || 'Menu'} · sisa {item.stock}</small></div><span className="badge danger-badge">Perlu dicek</span></div>)}</div> : <Empty text="Tidak ada stok menipis." />}</Card></div><Card title="Transaksi Terbaru">{report.recentOrders.length ? <div className="mobile-card-list always">{report.recentOrders.map((o) => <OrderCard key={o.id} order={o} onShareOrder={onShareOrder} />)}</div> : <Empty text="Belum ada transaksi pada periode ini." />}</Card></section>;
+}
 function Kasir({ menu, bestSellingIds, cart, setCart, updateCartQty, addToCart, search, setSearch, cartTotal, checkout, setActive }) {
   const [category, setCategory] = useState('Semua');
   const categories = useMemo(() => ['Semua', ...Array.from(new Set(menu.map((i) => i.category).filter(Boolean)))], [menu]);
@@ -549,7 +731,7 @@ function Pesanan({ orders, exportCsv, onShareOrder }) {
   const [period, setPeriod] = useState('all');
   const minTime = period === 'today' ? todayStart() : period === 'week' ? weekStart() : period === 'month' ? monthStart() : 0;
   const filtered = orders.filter((o) => o.timestamp >= minTime);
-  return <Card title="Riwayat Transaksi" action={<button onClick={exportCsv}><Download /> CSV</button>}><div className="period-chips">{[['all', 'Semua'], ['today', 'Hari ini'], ['week', 'Minggu ini'], ['month', 'Bulan ini']].map(([id, label]) => <button key={id} className={period === id ? 'active' : ''} onClick={() => setPeriod(id)}>{label}</button>)}</div>{filtered.length ? <><div className="mobile-card-list">{filtered.map((o) => <OrderCard key={o.id} order={o} onShareOrder={onShareOrder} />)}</div><table className="desktop-table"><thead><tr><th>No</th><th>Waktu</th><th>Detail Pesanan</th><th className="right">Total</th><th>Aksi</th></tr></thead><tbody>{filtered.map((o) => <tr key={o.id}><td><b>{receiptNo(o)}</b></td><td>{formatDate(o.timestamp)}</td><td>{o.items.map((i, idx) => <span className="chip" key={idx}>{i.qty}x {i.name}</span>)}</td><td className="right"><b>{formatRp(o.total)}</b></td><td><button className="share-link" type="button" onClick={() => onShareOrder(o)}>Share PNG</button></td></tr>)}</tbody></table></> : <Empty text="Belum ada transaksi pada periode ini." />}</Card>;
+  return <Card title="Riwayat Transaksi" action={<button onClick={() => exportCsv(filtered)}><Download /> CSV</button>}><div className="period-chips">{[['all', 'Semua'], ['today', 'Hari ini'], ['week', 'Minggu ini'], ['month', 'Bulan ini']].map(([id, label]) => <button key={id} className={period === id ? 'active' : ''} onClick={() => setPeriod(id)}>{label}</button>)}</div>{filtered.length ? <><div className="mobile-card-list">{filtered.map((o) => <OrderCard key={o.id} order={o} onShareOrder={onShareOrder} />)}</div><table className="desktop-table"><thead><tr><th>No</th><th>Waktu</th><th>Detail Pesanan</th><th className="right">Total</th><th>Aksi</th></tr></thead><tbody>{filtered.map((o) => <tr key={o.id}><td><b>{receiptNo(o)}</b></td><td>{formatDate(o.timestamp)}</td><td>{o.items.map((i, idx) => <span className="chip" key={idx}>{i.qty}x {i.name}</span>)}</td><td className="right"><b>{formatRp(o.total)}</b></td><td><button className="share-link" type="button" onClick={() => onShareOrder(o)}>Share PNG</button></td></tr>)}</tbody></table></> : <Empty text="Belum ada transaksi pada periode ini." />}</Card>;
 }
 function Pengeluaran({ expenses, expense, setExpense, addExpense, del }) { return <section className="space"><Card title="Catat Pengeluaran"><form onSubmit={addExpense} className="grid-form"><label>Nama Pengeluaran<input value={expense.name} onChange={(e) => setExpense({ ...expense, name: e.target.value })} placeholder="Belanja kopi / gula" /></label><label>Nominal<input type="number" value={expense.amount} onChange={(e) => setExpense({ ...expense, amount: e.target.value })} /></label><label>Kategori<select value={expense.category} onChange={(e) => setExpense({ ...expense, category: e.target.value })}>{['Belanja Bahan', 'Operasional', 'Gaji', 'Sewa', 'Lainnya'].map((x) => <option key={x}>{x}</option>)}</select></label><button className="dark">Simpan</button></form></Card><Card title="Riwayat Pengeluaran">{expenses.length ? <div className="mobile-card-list always">{expenses.map((e) => <div className="order-card" key={e.id}><div><b>{e.name}</b><small>{formatDate(e.timestamp)}</small><span className="badge">{e.category}</span></div><div className="order-total"><b>{formatRp(e.amount)}</b><button className="danger" onClick={() => del(e.id)}><Trash2 /></button></div></div>)}</div> : <Empty text="Belum ada pengeluaran." />}</Card></section>; }
 function OrderCard({ order, onShareOrder }) { return <div className="order-card"><div><b>{receiptNo(order)}</b><small>{formatDate(order.timestamp)}</small><small>{order.items.map((i) => `${i.qty}x ${i.name}`).join(', ')}</small>{paidAmount(order) ? <small>Dibayar {formatRp(paidAmount(order))} · Kembali {formatRp(changeAmount(order))}</small> : null}</div><div className="order-total"><b>{formatRp(order.total)}</b><button className="share-link" type="button" onClick={() => onShareOrder(order)}>Share PNG</button></div></div>; }
