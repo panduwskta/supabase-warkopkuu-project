@@ -6,9 +6,9 @@ export type SimpleSyncEntityType = Extract<
 >;
 
 export interface EntitySyncResult {
-  entityType: SimpleSyncEntityType | 'profile';
+  entityType: SimpleSyncEntityType | 'profile' | 'checkout';
   localId: string;
-  status: 'synced' | 'failed' | 'skipped';
+  status: 'synced' | 'failed' | 'skipped' | 'conflict';
   error?: string;
 }
 
@@ -16,6 +16,7 @@ export interface SyncRunResult {
   ok: boolean;
   synced: number;
   failed: number;
+  conflict: number;
   skipped: number;
   errors: string[];
   results: EntitySyncResult[];

@@ -8,6 +8,7 @@ import {
   type LocalPaymentMethod,
   type LocalProduct,
   type LocalStore,
+  type SyncQueueItem,
   type SyncableEntity,
 } from '@/lib/db';
 import { markRelatedQueueItemsFailed, markRelatedQueueItemsSynced } from './queue-helpers';
@@ -15,6 +16,10 @@ import type { EntitySyncResult, SimpleSyncEntityType } from './types';
 
 function shouldSync(entity: SyncableEntity) {
   return entity.syncStatus === 'pending' || entity.syncStatus === 'failed' || !entity.remoteId;
+}
+
+function isActiveQueueItem(item: SyncQueueItem) {
+  return item.status === 'pending' || item.status === 'syncing' || item.status === 'failed' || item.status === 'conflict';
 }
 
 function remoteStoreId(store: LocalStore) {
@@ -42,6 +47,16 @@ async function markEntityFailed<T extends SyncableEntity>(put: (value: T) => Pro
     updatedAt: nowIso(),
   };
   await put(failed as T);
+}
+
+async function markProductRemoteCreatedForCheckout(product: LocalProduct, remoteId: string) {
+  const timestamp = nowIso();
+  await warunginDb.products.put({
+    ...product,
+    remoteId,
+    lastSyncedAt: timestamp,
+    updatedAt: timestamp,
+  });
 }
 
 const putCategory = (value: LocalCategory) => warunginDb.categories.put(value);
@@ -147,6 +162,69 @@ async function upsertRemote(tableName: string, remoteId: string | undefined, pay
   return data.id as string;
 }
 
+async function findActiveCheckoutProductQueue(product: LocalProduct) {
+  const queueItems = await warunginDb.syncQueue.where({ storeId: product.storeId }).toArray();
+  const activeTransactionIds = new Set(
+    queueItems
+      .filter((item) => item.entityType === 'transaction' && item.operation === 'create' && isActiveQueueItem(item))
+      .map((item) => item.entityLocalId)
+  );
+
+  if (activeTransactionIds.size === 0) return undefined;
+
+  const transactionItems = await warunginDb.transactionItems.where({ storeId: product.storeId }).toArray();
+  const hasActiveCheckoutItem = transactionItems.some(
+    (item) => activeTransactionIds.has(item.transactionLocalId) && item.productLocalId === product.localId
+  );
+
+  if (!hasActiveCheckoutItem) return undefined;
+
+  return queueItems.find(
+    (item) => item.entityType === 'product' && item.entityLocalId === product.localId && item.operation === 'update' && isActiveQueueItem(item)
+  );
+}
+
+async function findActiveProductCreateQueue(product: LocalProduct) {
+  const queueItems = await warunginDb.syncQueue.where({ entityLocalId: product.localId }).toArray();
+  return queueItems.find((item) => item.entityType === 'product' && item.operation === 'create' && isActiveQueueItem(item));
+}
+
+async function pendingCheckoutQuantityForProduct(product: LocalProduct) {
+  const queueItems = await warunginDb.syncQueue.where({ storeId: product.storeId }).toArray();
+  const activeTransactionIds = new Set(
+    queueItems
+      .filter((item) => item.entityType === 'transaction' && item.operation === 'create' && isActiveQueueItem(item))
+      .map((item) => item.entityLocalId)
+  );
+
+  if (activeTransactionIds.size === 0) return 0;
+
+  const transactionItems = await warunginDb.transactionItems.where({ storeId: product.storeId }).toArray();
+  return transactionItems
+    .filter((item) => activeTransactionIds.has(item.transactionLocalId) && item.productLocalId === product.localId)
+    .reduce((total, item) => total + Number(item.quantity || 0), 0);
+}
+
+async function markProductCreateQueueSynced(product: LocalProduct, remoteId: string) {
+  const createQueue = await findActiveProductCreateQueue(product);
+  if (!createQueue) return;
+
+  const timestamp = nowIso();
+  await warunginDb.syncQueue.put({
+    ...createQueue,
+    entityRemoteId: remoteId,
+    status: 'synced',
+    lastError: undefined,
+    updatedAt: timestamp,
+    syncedAt: timestamp,
+  });
+}
+
+function productFromCreateQueue(product: LocalProduct, queueItem: SyncQueueItem | undefined, restoredStock: number) {
+  if (!queueItem) return product;
+  return { ...(queueItem.payload as unknown as LocalProduct), ...product, stock: restoredStock } satisfies LocalProduct;
+}
+
 export async function syncCategory(category: LocalCategory, store: LocalStore): Promise<EntitySyncResult> {
   if (!shouldSync(category)) return { entityType: 'category', localId: category.localId, status: 'skipped' };
   try {
@@ -191,6 +269,32 @@ export async function syncExpenseCategory(category: LocalExpenseCategory, store:
 
 export async function syncProduct(product: LocalProduct, store: LocalStore): Promise<EntitySyncResult> {
   if (!shouldSync(product)) return { entityType: 'product', localId: product.localId, status: 'skipped' };
+  const checkoutProductQueue = await findActiveCheckoutProductQueue(product);
+
+  if (checkoutProductQueue) {
+    if (product.remoteId) {
+      return { entityType: 'product', localId: product.localId, status: 'skipped', error: 'Product stock update is waiting for checkout RPC sync.' };
+    }
+
+    const createQueue = await findActiveProductCreateQueue(product);
+    if (!createQueue) {
+      return { entityType: 'product', localId: product.localId, status: 'failed', error: 'Product must be synced before checkout RPC can run.' };
+    }
+
+    try {
+      const restoredStock = product.stock + (await pendingCheckoutQuantityForProduct(product));
+      const productSnapshot = productFromCreateQueue(product, createQueue, restoredStock);
+      const payload = await productPayload(productSnapshot, store);
+      const remoteId = await upsertRemote('products', undefined, payload);
+      await markProductRemoteCreatedForCheckout(product, remoteId);
+      await markProductCreateQueueSynced(product, remoteId);
+      return { entityType: 'product', localId: product.localId, status: 'synced' };
+    } catch (error) {
+      await markEntityFailed(putProduct, product);
+      return { entityType: 'product', localId: product.localId, status: 'failed', error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
   try {
     const payload = await productPayload(product, store);
     const remoteId = await upsertRemote('products', product.remoteId, payload);
