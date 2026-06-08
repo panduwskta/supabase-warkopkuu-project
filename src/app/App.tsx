@@ -677,6 +677,10 @@ function App() {
         show(`${result.failed} data belum berhasil sync. Coba lagi nanti.`, 'error');
         return;
       }
+      if (result.conflict > 0) {
+        show(`${result.conflict} data perlu dicek sebelum sync selesai.`, 'error');
+        return;
+      }
       show(result.synced > 0 ? `${result.synced} data berhasil sync.` : 'Data lokal sudah aman.');
     } catch (error) {
       show(error instanceof Error ? error.message : 'Sync gagal.', 'error');
