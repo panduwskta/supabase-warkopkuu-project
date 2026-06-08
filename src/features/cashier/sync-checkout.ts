@@ -193,9 +193,17 @@ export async function syncCheckoutTransactionGroup(transactionLocalId: string): 
 
   let payload;
   try {
+    const paymentMethod = group.transaction.paymentMethodLocalId
+      ? await warunginDb.paymentMethods.get(group.transaction.paymentMethodLocalId)
+      : undefined;
     payload = buildCheckoutRpcPayload({
       store,
-      transaction: group.transaction,
+      transaction: {
+        ...group.transaction,
+        paymentMethodRemoteId: group.transaction.paymentMethodRemoteId ?? paymentMethod?.remoteId,
+        paymentMethodSnapshot: group.transaction.paymentMethodSnapshot ?? paymentMethod?.name,
+        paymentMethodKind: group.transaction.paymentMethodKind ?? paymentMethod?.kind,
+      },
       transactionItems: group.transactionItems,
       products: group.products,
     });

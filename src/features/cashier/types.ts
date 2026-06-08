@@ -17,6 +17,7 @@ export interface CheckoutInput {
   cartItems: CartItem[];
   paymentAmount: number;
   paymentMethodLocalId?: string;
+  paymentMethodRemoteId?: string;
   paymentMethodSnapshot?: string;
   paymentMethodKind?: PaymentMethodKind;
   receiptPrefix?: string;
