@@ -673,12 +673,18 @@ function App() {
   const handleSyncNow = async () => {
     try {
       const result = await store.syncNow();
-      if (result.failed > 0) {
-        show(`${result.failed} data belum berhasil sync. Coba lagi nanti.`, 'error');
+      const remaining = result.remaining || { pending: 0, syncing: 0, failed: 0, conflict: 0, active: 0 };
+      if (result.failed > 0 || remaining.failed > 0) {
+        show(`${remaining.failed || result.failed} data belum berhasil sync. Coba lagi nanti.`, 'error');
         return;
       }
-      if (result.conflict > 0) {
-        show(`${result.conflict} data perlu dicek sebelum sync selesai.`, 'error');
+      if (result.conflict > 0 || remaining.conflict > 0) {
+        show(`${remaining.conflict || result.conflict} data perlu dicek sebelum sync selesai.`, 'error');
+        return;
+      }
+      if (remaining.active > 0) {
+        const prefix = result.synced > 0 ? `${result.synced} data berhasil sync. ` : '';
+        show(`${prefix}${remaining.pending + remaining.syncing} data masih menunggu sync.`);
         return;
       }
       show(result.synced > 0 ? `${result.synced} data berhasil sync.` : 'Data lokal sudah aman.');

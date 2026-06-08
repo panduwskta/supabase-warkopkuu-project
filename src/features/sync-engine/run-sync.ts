@@ -11,19 +11,31 @@ import {
 } from './simple-entity-sync';
 import type { EntitySyncResult, SyncRunResult } from './types';
 
-function summarize(results: EntitySyncResult[]): SyncRunResult {
+async function countRemainingQueue(storeId: string): Promise<SyncRunResult['remaining']> {
+  const queueItems = await warunginDb.syncQueue.where({ storeId }).toArray();
+  const pending = queueItems.filter((item) => item.status === 'pending').length;
+  const syncing = queueItems.filter((item) => item.status === 'syncing').length;
+  const failed = queueItems.filter((item) => item.status === 'failed').length;
+  const conflict = queueItems.filter((item) => item.status === 'conflict').length;
+
+  return { pending, syncing, failed, conflict, active: pending + syncing + failed + conflict };
+}
+
+async function summarize(storeId: string, results: EntitySyncResult[]): Promise<SyncRunResult> {
   const synced = results.filter((result) => result.status === 'synced').length;
   const failed = results.filter((result) => result.status === 'failed').length;
   const conflict = results.filter((result) => result.status === 'conflict').length;
   const skipped = results.filter((result) => result.status === 'skipped').length;
   const errors = results.filter((result) => result.error).map((result) => `${result.entityType}: ${result.error}`);
+  const remaining = await countRemainingQueue(storeId);
 
   return {
-    ok: failed === 0 && conflict === 0,
+    ok: failed === 0 && conflict === 0 && remaining.failed === 0 && remaining.conflict === 0,
     synced,
     failed,
     conflict,
     skipped,
+    remaining,
     errors,
     results,
   };
@@ -54,9 +66,11 @@ async function loadCheckoutTransactionLocalIds(storeId: string) {
 
 export async function runSimpleEntitySync(storeId: string): Promise<SyncRunResult> {
   const results: EntitySyncResult[] = [];
+  const localStoreBeforeBootstrap = await warunginDb.stores.get(storeId);
+  const storeNeedsBootstrap = !localStoreBeforeBootstrap?.remoteId || localStoreBeforeBootstrap.syncStatus !== 'synced';
   const store = await bootstrapRemoteStore(storeId);
-  results.push({ entityType: 'profile', localId: store.ownerUserId ?? 'profile', status: 'synced' });
-  results.push({ entityType: 'store', localId: store.localId, status: 'synced' });
+  results.push({ entityType: 'profile', localId: store.ownerUserId ?? 'profile', status: 'skipped' });
+  results.push({ entityType: 'store', localId: store.localId, status: storeNeedsBootstrap ? 'synced' : 'skipped' });
 
   const { categories, paymentMethods, expenseCategories, products, expenses } = await loadSimpleEntities(store.localId);
 
@@ -79,5 +93,5 @@ export async function runSimpleEntitySync(storeId: string): Promise<SyncRunResul
     });
   }
 
-  return summarize(results);
+  return summarize(store.localId, results);
 }
