@@ -18,6 +18,13 @@ export interface SyncRunResult {
   failed: number;
   conflict: number;
   skipped: number;
+  remaining: {
+    pending: number;
+    syncing: number;
+    failed: number;
+    conflict: number;
+    active: number;
+  };
   errors: string[];
   results: EntitySyncResult[];
 }

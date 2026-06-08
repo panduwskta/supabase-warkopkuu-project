@@ -174,48 +174,88 @@ async function findOrCreateExpenseCategory(storeId: string, name: string) {
 async function ensureDefaultCategories(storeId: string) {
   const existing = await listCategories(storeId);
   for (const [index, name] of DEFAULT_CATEGORIES.entries()) {
-    if (!existing.some((category) => category.name.toLowerCase() === name.toLowerCase())) {
-      await createCategory({ storeId, name, sortOrder: index, isSample: true });
+    const category = existing.find((item) => item.name.toLowerCase() === name.toLowerCase());
+    const defaultCategory = category ?? (await createCategory({ storeId, name, sortOrder: index, isSample: true }));
+
+    if (defaultCategory.syncStatus !== 'synced' || !defaultCategory.remoteId) {
+      await enqueueSyncQueueItem({
+        storeId,
+        entityType: 'category',
+        entityLocalId: defaultCategory.localId,
+        operation: defaultCategory.remoteId ? 'update' : 'create',
+        payload: { ...defaultCategory },
+      });
     }
   }
 }
 
 async function ensureDefaultPaymentMethods(storeId: string) {
   const existing = await warunginDb.paymentMethods.where({ storeId }).toArray();
-  if (existing.some((method) => !method.isDeleted)) return;
+  const activeMethods = existing.filter((method) => !method.isDeleted && !method.deletedAt);
 
   const timestamp = nowIso();
-  const methods: LocalPaymentMethod[] = [
+  const defaults = [
     { name: 'Tunai', kind: 'cash', isDefault: true },
     { name: 'QRIS', kind: 'qris', isDefault: false },
     { name: 'Transfer', kind: 'transfer', isDefault: false },
     { name: 'E-wallet', kind: 'ewallet', isDefault: false },
-  ].map((method) => ({
-    ...createSyncFields(storeId, { isSample: true }),
-    localId: createLocalId('payment-method'),
-    name: method.name,
-    kind: method.kind as LocalPaymentMethod['kind'],
-    isDefault: method.isDefault,
-    isActive: true,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  }));
+  ];
 
-  await warunginDb.paymentMethods.bulkAdd(methods);
+  for (const method of defaults) {
+    const existingMethod = activeMethods.find((item) => item.name.toLowerCase() === method.name.toLowerCase());
+    const defaultMethod =
+      existingMethod ??
+      ({
+        ...createSyncFields(storeId, { isSample: true }),
+        localId: createLocalId('payment-method'),
+        name: method.name,
+        kind: method.kind as LocalPaymentMethod['kind'],
+        isDefault: method.isDefault,
+        isActive: true,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      } satisfies LocalPaymentMethod);
+
+    if (!existingMethod) await warunginDb.paymentMethods.add(defaultMethod);
+
+    if (defaultMethod.syncStatus !== 'synced' || !defaultMethod.remoteId) {
+      await enqueueSyncQueueItem({
+        storeId,
+        entityType: 'paymentMethod',
+        entityLocalId: defaultMethod.localId,
+        operation: defaultMethod.remoteId ? 'update' : 'create',
+        payload: { ...defaultMethod },
+      });
+    }
+  }
 }
 
 async function ensureDefaultExpenseCategories(storeId: string) {
   const existing = await warunginDb.expenseCategories.where({ storeId }).toArray();
   for (const name of DEFAULT_EXPENSE_CATEGORIES) {
-    if (!existing.some((category) => !category.isDeleted && category.name.toLowerCase() === name.toLowerCase())) {
+    const category = existing.find((item) => !item.isDeleted && !item.deletedAt && item.name.toLowerCase() === name.toLowerCase());
+    let defaultCategory = category;
+
+    if (!defaultCategory) {
       const timestamp = nowIso();
-      await warunginDb.expenseCategories.add({
+      defaultCategory = {
         ...createSyncFields(storeId, { isSample: true }),
         localId: createLocalId('expense-category'),
         name,
         isDefault: true,
         createdAt: timestamp,
         updatedAt: timestamp,
+      } satisfies LocalExpenseCategory;
+      await warunginDb.expenseCategories.add(defaultCategory);
+    }
+
+    if (defaultCategory.syncStatus !== 'synced' || !defaultCategory.remoteId) {
+      await enqueueSyncQueueItem({
+        storeId,
+        entityType: 'expenseCategory',
+        entityLocalId: defaultCategory.localId,
+        operation: defaultCategory.remoteId ? 'update' : 'create',
+        payload: { ...defaultCategory },
       });
     }
   }
