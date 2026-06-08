@@ -40,9 +40,7 @@ import {
   WalletCards,
 } from 'lucide-react';
 const supabase = getSupabaseClient();
-const LOCAL_KEY = 'warkopkuu_local_v1';
 
-const uid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const now = () => Date.now();
 const formatRp = (amount) =>
   new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(
@@ -80,14 +78,6 @@ const receiptText = (order) => {
   lines.push('', 'Terima kasih 🙏');
   return lines.join('\n');
 };
-const safeJson = (v, fallback) => {
-  try {
-    return JSON.parse(v) ?? fallback;
-  } catch {
-    return fallback;
-  }
-};
-
 const downloadBlob = (blob, filename) => {
   const a = document.createElement('a');
   const url = URL.createObjectURL(blob);
@@ -268,98 +258,44 @@ const NAV_ITEMS = [
   ['pengeluaran', 'Biaya', WalletCards],
 ];
 
-function readLocal() {
-  return safeJson(localStorage.getItem(LOCAL_KEY), { accounts: [], sessions: {}, menu: [], orders: [], expenses: [] });
-}
-function writeLocal(db) {
-  localStorage.setItem(LOCAL_KEY, JSON.stringify(db));
-  window.dispatchEvent(new Event('warkop-local-change'));
-}
-async function hashPassword(password, salt) {
-  const enc = new TextEncoder();
-  const buf = await crypto.subtle.digest('SHA-256', enc.encode(`${salt}:${password}`));
-  return Array.from(new Uint8Array(buf))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
 function useAuth() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const configIssue = getSupabaseEnvironmentIssue();
+  const authIssue = configIssue || (!supabase ? 'Supabase belum dikonfigurasi. Set VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY/VITE_SUPABASE_PUBLISHABLE_KEY untuk masuk.' : undefined);
   useEffect(() => {
-    if (configIssue) {
+    if (authIssue) {
       setUser(null);
       setLoading(false);
       return;
     }
-    if (supabase) {
-      const {
-        data: { subscription },
-      } = supabase.auth.onAuthStateChange((_e, session) => {
-        setUser(session?.user ?? null);
-        setLoading(false);
-      });
-      supabase.auth.getUser().then(({ data }) => {
-        setUser(data.user ?? null);
-        setLoading(false);
-      });
-      return () => subscription.unsubscribe();
-    }
-    const sid = localStorage.getItem('warkop_session');
-    const db = readLocal();
-    setUser(sid ? db.accounts.find((a) => a.id === sid) ?? null : null);
-    setLoading(false);
-    const on = () => {
-      const s = localStorage.getItem('warkop_session');
-      const d = readLocal();
-      setUser(s ? d.accounts.find((a) => a.id === s) ?? null : null);
-    };
-    window.addEventListener('storage', on);
-    window.addEventListener('warkop-local-change', on);
-    return () => {
-      window.removeEventListener('storage', on);
-      window.removeEventListener('warkop-local-change', on);
-    };
-  }, [configIssue]);
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_e, session) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+    supabase.auth.getUser().then(({ data }) => {
+      setUser(data.user ?? null);
+      setLoading(false);
+    });
+    return () => subscription.unsubscribe();
+  }, [authIssue]);
   const signUp = async ({ name, email, password }) => {
-    if (configIssue) throw new Error(configIssue);
-    if (supabase) {
-      const { error } = await supabase.auth.signUp({ email, password, options: { data: { name } } });
-      if (error) throw error;
-      return;
-    }
-    const db = readLocal();
-    if (db.accounts.some((a) => a.email.toLowerCase() === email.toLowerCase())) throw new Error('Email sudah terdaftar.');
-    const salt = uid();
-    const passHash = await hashPassword(password, salt);
-    const account = { id: uid(), name, email, salt, passHash, created_at: now() };
-    db.accounts.push(account);
-    writeLocal(db);
-    localStorage.setItem('warkop_session', account.id);
-    window.dispatchEvent(new Event('warkop-local-change'));
+    if (authIssue) throw new Error(authIssue);
+    const { error } = await supabase.auth.signUp({ email, password, options: { data: { name } } });
+    if (error) throw error;
   };
   const signIn = async ({ email, password }) => {
-    if (configIssue) throw new Error(configIssue);
-    if (supabase) {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      return;
-    }
-    const db = readLocal();
-    const account = db.accounts.find((a) => a.email.toLowerCase() === email.toLowerCase());
-    if (!account) throw new Error('Email atau password salah.');
-    const passHash = await hashPassword(password, account.salt);
-    if (passHash !== account.passHash) throw new Error('Email atau password salah.');
-    localStorage.setItem('warkop_session', account.id);
-    window.dispatchEvent(new Event('warkop-local-change'));
+    if (authIssue) throw new Error(authIssue);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
   };
   const signOut = async () => {
     if (supabase) await supabase.auth.signOut();
-    localStorage.removeItem('warkop_session');
-    window.dispatchEvent(new Event('warkop-local-change'));
   };
-  return { user, loading, signUp, signIn, signOut, mode: supabase ? 'cloud' : 'local', configIssue };
+  return { user, loading, signUp, signIn, signOut, mode: 'cloud', configIssue: authIssue };
 }
 
 function useStore(user) {
@@ -481,7 +417,7 @@ function AuthScreen({ auth }) {
           <button disabled={Boolean(auth.configIssue)} className={mode === 'login' ? 'active' : ''} onClick={() => setMode('login')}>Masuk</button>
           <button disabled={Boolean(auth.configIssue)} className={mode === 'register' ? 'active' : ''} onClick={() => setMode('register')}>Daftar</button>
         </div>
-        {auth.configIssue && <div className="error">Preview develop belum terhubung ke Supabase staging. {auth.configIssue}</div>}
+        {auth.configIssue && <div className="error">Login cloud belum tersedia. {auth.configIssue}</div>}
         <form onSubmit={submit} className="form">
           {mode === 'register' && <label>Nama Usaha / Owner<input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Warung Pak Budi" /></label>}
           <label>Email<input type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="nama@email.com" /></label>
@@ -489,7 +425,7 @@ function AuthScreen({ auth }) {
           {err && <div className="error">{err}</div>}
           <button disabled={busy || Boolean(auth.configIssue)} className="primary">{busy ? 'Memproses...' : mode === 'login' ? 'Masuk ke Dashboard' : 'Buat Akun'}</button>
         </form>
-        <p className="muted small">Mode penyimpanan: <b>{auth.mode === 'cloud' ? 'Cloud database/auth' : 'Akun lokal browser'}</b></p>
+        <p className="muted small">Mode penyimpanan: <b>Cloud database/auth</b>. Tidak ada fallback akun lokal browser.</p>
         <Credit />
       </div>
     </div>
