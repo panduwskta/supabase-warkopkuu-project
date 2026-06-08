@@ -5,6 +5,7 @@ import writeExcelFile from 'write-excel-file/browser';
 import { DESKTOP_COMING_SOON_ITEMS } from '../features/desktop';
 import {
   checkoutCartLocal,
+  completeLocalV2Onboarding,
   createExpenseLocal,
   createMenuProduct,
   deleteExpenseLocal,
@@ -365,6 +366,7 @@ function useStore(user) {
   const [expenses, setExpenses] = useState([]);
   const [localStore, setLocalStore] = useState(null);
   const [syncSummary, setSyncSummary] = useState({ pending: 0, syncing: 0, failed: 0, conflict: 0 });
+  const [onboardingCompleted, setOnboardingCompleted] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [loading, setLoading] = useState(true);
   const userId = user?.id;
@@ -378,6 +380,7 @@ function useStore(user) {
     setOrders(data.orders);
     setExpenses(data.expenses);
     setSyncSummary(data.syncSummary);
+    setOnboardingCompleted(Boolean(data.store?.onboardingCompleted));
     setLoading(false);
   }, [localStore, user, userId]);
 
@@ -432,7 +435,13 @@ function useStore(user) {
     }
   };
 
-  return { menu, orders, expenses, loading, localStore, syncSummary, syncing, syncNow, addMenu, updateMenu, deleteMenu, checkoutCart, addExpense, deleteExpense, refresh };
+  const completeOnboarding = async (options) => {
+    if (!localStore) throw new Error('Local store belum siap.');
+    await completeLocalV2Onboarding(localStore.localId, options);
+    await refresh();
+  };
+
+  return { menu, orders, expenses, loading, localStore, onboardingCompleted, syncSummary, syncing, syncNow, completeOnboarding, addMenu, updateMenu, deleteMenu, checkoutCart, addExpense, deleteExpense, refresh };
 }
 
 function AuthScreen({ auth }) {
@@ -491,6 +500,41 @@ function PublicLanding() {
   return <div className="landing-page"><header className="landing-header"><div className="side-brand landing-brand"><div className="brand-icon"><Coffee /></div><div><h1>Warung<span>in</span></h1><p>Kasir warung UMKM Indonesia</p></div></div><nav className="landing-actions"><button type="button" onClick={() => goToLogin('login')}>Masuk</button><button type="button" className="primary compact" onClick={() => goToLogin('register')}>Daftar</button></nav></header><main className="landing-main"><section className="landing-hero"><span className="hero-pill"><Monitor /> Portal resmi Warungin</span><h2>POS sederhana untuk warung yang mau operasionalnya lebih rapi.</h2><p>Warungin membantu pemilik warung mencatat penjualan, mengelola menu, memantau pengeluaran, dan mengunduh laporan usaha tanpa sistem yang ribet.</p><div className="landing-cta"><button type="button" className="primary" onClick={() => goToLogin('register')}>Mulai Daftar</button><button type="button" onClick={() => goToLogin('login')}>Masuk ke App</button></div></section><section className="landing-feature-grid"><div><Receipt /><b>Kasir Harian</b><small>Catat pesanan, pembayaran, kembalian, dan riwayat transaksi.</small></div><div><List /><b>Menu & Stok</b><small>Kelola menu utama dan pantau stok dasar untuk operasional harian.</small></div><div><LayoutDashboard /><b>Laporan Basic</b><small>Lihat pendapatan, transaksi, pengeluaran, laba perkiraan, dan menu terlaris.</small></div><div><Download /><b>Export Laporan</b><small>Unduh laporan Excel/PDF untuk rekap usaha sederhana.</small></div></section></main><footer className="landing-footer"><Credit /></footer></div>;
 }
 
+function OnboardingScreen({ user, store, onComplete }) {
+  const [busy, setBusy] = useState(false);
+  const finish = async (seedDemoData) => {
+    setBusy(true);
+    try {
+      await onComplete({ seedDemoData });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="auth onboarding-screen">
+      <div className="auth-card onboarding-card">
+        <div className="brand">
+          <div className="brand-icon"><Store /></div>
+          <div>
+            <h1>Siapkan Warung<span>in</span></h1>
+            <p>{store?.name || user.email}</p>
+          </div>
+        </div>
+        <div className="onboarding-copy">
+          <h2>Mulai dari data contoh atau kosong?</h2>
+          <p>Dashboard sengaja belum ditampilkan sebelum setup awal selesai, supaya akun baru tidak langsung masuk ke halaman kosong.</p>
+        </div>
+        <div className="landing-cta onboarding-actions">
+          <button disabled={busy} type="button" className="primary" onClick={() => finish(true)}>{busy ? 'Menyiapkan...' : 'Gunakan Data Contoh'}</button>
+          <button disabled={busy} type="button" onClick={() => finish(false)}>Mulai Kosong</button>
+        </div>
+        <p className="muted small">Status sync awal hanya untuk setup toko/profil. Menu dan transaksi akan muncul setelah data dibuat atau contoh diaktifkan.</p>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const auth = useAuth();
   const store = useStore(auth.user);
@@ -515,6 +559,8 @@ function App() {
   if (auth.loading) return <Splash />;
   if (!auth.user && window.location.pathname === '/') return <PublicLanding />;
   if (!auth.user) return <AuthScreen auth={auth} />;
+  if (store.loading) return <Splash />;
+  if (!store.onboardingCompleted) return <OnboardingScreen user={auth.user} store={store.localStore} onComplete={store.completeOnboarding} />;
 
   const report = buildReportData({ orders: store.orders, expenses: store.expenses, menu: store.menu, period: reportPeriod });
   const addToCart = (item) => setCart((prev) => {
@@ -690,10 +736,11 @@ function Credit({ compact = false }) { return <div className={compact ? 'credit 
 function Splash({ small = false }) { return <div className={small ? 'splash small' : 'splash'}><Coffee /><p>Menyiapkan Kedai...</p></div>; }
 function SyncStatusPill({ summary }) {
   const pending = Number(summary?.pending || 0);
+  const pendingSetup = Number(summary?.pendingSetup || 0);
   const syncing = Number(summary?.syncing || 0);
   const failed = Number(summary?.failed || 0);
   const conflict = Number(summary?.conflict || 0);
-  const label = conflict ? `${conflict} konflik` : failed ? `${failed} gagal sync` : syncing ? `${syncing} syncing` : pending ? `${pending} menunggu sync` : 'Tersimpan lokal';
+  const label = conflict ? `${conflict} konflik` : failed ? `${failed} gagal sync` : syncing ? `${syncing} syncing` : pendingSetup === pending && pending > 0 ? 'Setup toko menunggu sync' : pending ? `${pending} data menunggu sync` : 'Tersimpan lokal';
   const cls = conflict || failed ? 'danger' : pending || syncing ? 'pending' : 'local';
   return <span className={`pill sync-pill ${cls}`}>{label}</span>;
 }

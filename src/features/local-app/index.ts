@@ -1,5 +1,6 @@
 import { checkoutLocal } from '@/features/cashier';
 import type { CartItem } from '@/features/cashier';
+import { ensureOnboardingState as ensureWizardOnboardingState, seedSampleData } from '@/features/onboarding';
 import { createCategory, createProduct, deactivateProduct, listCategories, listActiveProducts, updateProduct } from '@/features/products';
 import { enqueueSyncQueueItem } from '@/features/sync-queue';
 import {
@@ -220,23 +221,6 @@ async function ensureDefaultExpenseCategories(storeId: string) {
   }
 }
 
-async function ensureOnboardingState(storeId: string) {
-  const existing = await warunginDb.onboardingState.where({ storeId }).first();
-  if (existing) return existing;
-  const timestamp = nowIso();
-  const state = {
-    id: createLocalId('onboarding'),
-    storeId,
-    currentStep: 'local-v2-cutover',
-    completed: true,
-    demoDataSeeded: false,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  };
-  await warunginDb.onboardingState.add(state);
-  return state;
-}
-
 export async function ensureLocalV2Store(user: AppUserLike): Promise<LocalStore> {
   const ownerUserId = user.id || user.email || 'local-user';
   const existing = await warunginDb.stores.where({ ownerUserId }).first();
@@ -245,7 +229,7 @@ export async function ensureLocalV2Store(user: AppUserLike): Promise<LocalStore>
       ensureDefaultCategories(existing.localId),
       ensureDefaultPaymentMethods(existing.localId),
       ensureDefaultExpenseCategories(existing.localId),
-      ensureOnboardingState(existing.localId),
+      ensureWizardOnboardingState(existing.localId),
     ]);
     return existing;
   }
@@ -259,7 +243,7 @@ export async function ensureLocalV2Store(user: AppUserLike): Promise<LocalStore>
     name: userName(user),
     businessType: 'warung',
     receiptPrefix: 'WRG',
-    onboardingCompleted: true,
+    onboardingCompleted: false,
     demoDataSeeded: false,
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -278,14 +262,70 @@ export async function ensureLocalV2Store(user: AppUserLike): Promise<LocalStore>
     ensureDefaultCategories(store.localId),
     ensureDefaultPaymentMethods(store.localId),
     ensureDefaultExpenseCategories(store.localId),
-    ensureOnboardingState(store.localId),
+    ensureWizardOnboardingState(store.localId),
   ]);
   return store;
 }
 
+async function repairBypassedOnboardingIfEmpty(store: LocalStore) {
+  if (!store.onboardingCompleted) return store;
+
+  const state = await warunginDb.onboardingState.where({ storeId: store.localId }).first();
+  if (state?.currentStep !== 'local-v2-cutover') return store;
+
+  const [productCount, transactionCount, expenseCount] = await Promise.all([
+    warunginDb.products.where({ storeId: store.localId }).count(),
+    warunginDb.transactions.where({ storeId: store.localId }).count(),
+    warunginDb.expenses.where({ storeId: store.localId }).count(),
+  ]);
+
+  if (productCount + transactionCount + expenseCount > 0) return store;
+
+  const timestamp = nowIso();
+  const repairedStore = { ...store, onboardingCompleted: false, updatedAt: timestamp } satisfies LocalStore;
+  await Promise.all([
+    warunginDb.stores.put(repairedStore),
+    warunginDb.onboardingState.put({ ...state, currentStep: 'sample-data', completed: false, updatedAt: timestamp }),
+  ]);
+
+  return repairedStore;
+}
+
+export async function completeLocalV2Onboarding(storeId: string, options: { seedDemoData?: boolean } = {}) {
+  const store = await warunginDb.stores.get(storeId);
+  if (!store) throw new Error('Local store belum siap.');
+
+  if (options.seedDemoData) {
+    await seedSampleData({ storeId, ownerUserId: store.ownerUserId, resetExistingSampleData: true });
+  }
+
+  const state = await ensureWizardOnboardingState(storeId);
+  const timestamp = nowIso();
+  const updatedStore = {
+    ...store,
+    onboardingCompleted: true,
+    demoDataSeeded: options.seedDemoData ? true : store.demoDataSeeded,
+    updatedAt: timestamp,
+  } satisfies LocalStore;
+
+  await Promise.all([
+    warunginDb.stores.put(updatedStore),
+    warunginDb.onboardingState.put({
+      ...state,
+      currentStep: 'completed',
+      completed: true,
+      demoDataSeeded: options.seedDemoData ? true : state.demoDataSeeded,
+      updatedAt: timestamp,
+    }),
+  ]);
+
+  return updatedStore;
+}
+
 export async function loadLocalV2AppData(storeId: string) {
-  const [store, categories, products, transactions, transactionItems, expenses, expenseCategories, syncQueue] = await Promise.all([
+  const [rawStore, onboardingState, categories, products, transactions, transactionItems, expenses, expenseCategories, syncQueue] = await Promise.all([
     warunginDb.stores.get(storeId),
+    warunginDb.onboardingState.where({ storeId }).first(),
     listCategories(storeId),
     listActiveProducts(storeId),
     warunginDb.transactions.where({ storeId }).toArray(),
@@ -297,9 +337,11 @@ export async function loadLocalV2AppData(storeId: string) {
 
   const activeExpenses = expenses.filter((expense) => !expense.isDeleted && !expense.deletedAt);
   const activeExpenseCategories = expenseCategories.filter((category) => !category.isDeleted && !category.deletedAt);
+  const store = rawStore ? await repairBypassedOnboardingIfEmpty(rawStore) : rawStore;
 
   return {
     store,
+    onboardingState,
     menu: products.map((product) => toMenuView(product, categories)),
     orders: transactions
       .filter((transaction) => !transaction.isDeleted && !transaction.deletedAt)
@@ -311,6 +353,7 @@ export async function loadLocalV2AppData(storeId: string) {
       syncing: syncQueue.filter((item) => item.status === 'syncing').length,
       failed: syncQueue.filter((item) => item.status === 'failed').length,
       conflict: syncQueue.filter((item) => item.status === 'conflict').length,
+      pendingSetup: syncQueue.filter((item) => item.status === 'pending' && item.entityType === 'store').length,
     },
   };
 }
