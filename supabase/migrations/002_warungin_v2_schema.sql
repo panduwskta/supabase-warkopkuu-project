@@ -255,6 +255,53 @@ alter table public.transaction_items enable row level security;
 alter table public.expense_categories enable row level security;
 alter table public.expenses enable row level security;
 
+-- Policy reset for idempotent re-apply / partial-apply recovery.
+-- Delete policies are intentionally dropped and not recreated for v2 operational tables;
+-- Warungin v2 uses soft delete fields (`is_deleted`, `deleted_at`) for operational/history safety.
+drop policy if exists "profiles own select" on public.profiles;
+drop policy if exists "profiles own insert" on public.profiles;
+drop policy if exists "profiles own update" on public.profiles;
+
+drop policy if exists "stores owner select" on public.stores;
+drop policy if exists "stores owner insert" on public.stores;
+drop policy if exists "stores owner update" on public.stores;
+drop policy if exists "stores owner delete" on public.stores;
+
+drop policy if exists "categories store owner select" on public.categories;
+drop policy if exists "categories store owner insert" on public.categories;
+drop policy if exists "categories store owner update" on public.categories;
+drop policy if exists "categories store owner delete" on public.categories;
+
+drop policy if exists "products store owner select" on public.products;
+drop policy if exists "products store owner insert" on public.products;
+drop policy if exists "products store owner update" on public.products;
+drop policy if exists "products store owner delete" on public.products;
+
+drop policy if exists "payment methods store owner select" on public.payment_methods;
+drop policy if exists "payment methods store owner insert" on public.payment_methods;
+drop policy if exists "payment methods store owner update" on public.payment_methods;
+drop policy if exists "payment methods store owner delete" on public.payment_methods;
+
+drop policy if exists "transactions store owner select" on public.transactions;
+drop policy if exists "transactions store owner insert" on public.transactions;
+drop policy if exists "transactions store owner update" on public.transactions;
+drop policy if exists "transactions store owner delete" on public.transactions;
+
+drop policy if exists "transaction items store owner select" on public.transaction_items;
+drop policy if exists "transaction items store owner insert" on public.transaction_items;
+drop policy if exists "transaction items store owner update" on public.transaction_items;
+drop policy if exists "transaction items store owner delete" on public.transaction_items;
+
+drop policy if exists "expense categories store owner select" on public.expense_categories;
+drop policy if exists "expense categories store owner insert" on public.expense_categories;
+drop policy if exists "expense categories store owner update" on public.expense_categories;
+drop policy if exists "expense categories store owner delete" on public.expense_categories;
+
+drop policy if exists "expenses store owner select" on public.expenses;
+drop policy if exists "expenses store owner insert" on public.expenses;
+drop policy if exists "expenses store owner update" on public.expenses;
+drop policy if exists "expenses store owner delete" on public.expenses;
+
 -- Profiles: users can manage their own profile row.
 create policy "profiles own select" on public.profiles
   for select to authenticated
@@ -269,7 +316,7 @@ create policy "profiles own update" on public.profiles
   using ((select auth.uid()) = id)
   with check ((select auth.uid()) = id);
 
--- Stores: users can manage stores they own.
+-- Stores: users can read/create/update stores they own. Hard delete is not allowed by policy.
 create policy "stores owner select" on public.stores
   for select to authenticated
   using ((select auth.uid()) = owner_user_id);
@@ -283,11 +330,7 @@ create policy "stores owner update" on public.stores
   using ((select auth.uid()) = owner_user_id)
   with check ((select auth.uid()) = owner_user_id);
 
-create policy "stores owner delete" on public.stores
-  for delete to authenticated
-  using ((select auth.uid()) = owner_user_id);
-
--- Store-owned operational tables.
+-- Store-owned operational tables: select/insert/update only. Deletes should be soft deletes.
 create policy "categories store owner select" on public.categories
   for select to authenticated
   using (exists (select 1 from public.stores s where s.id = categories.store_id and s.owner_user_id = (select auth.uid())));
@@ -300,10 +343,6 @@ create policy "categories store owner update" on public.categories
   for update to authenticated
   using (exists (select 1 from public.stores s where s.id = categories.store_id and s.owner_user_id = (select auth.uid())))
   with check (exists (select 1 from public.stores s where s.id = categories.store_id and s.owner_user_id = (select auth.uid())));
-
-create policy "categories store owner delete" on public.categories
-  for delete to authenticated
-  using (exists (select 1 from public.stores s where s.id = categories.store_id and s.owner_user_id = (select auth.uid())));
 
 create policy "products store owner select" on public.products
   for select to authenticated
@@ -318,10 +357,6 @@ create policy "products store owner update" on public.products
   using (exists (select 1 from public.stores s where s.id = products.store_id and s.owner_user_id = (select auth.uid())))
   with check (exists (select 1 from public.stores s where s.id = products.store_id and s.owner_user_id = (select auth.uid())));
 
-create policy "products store owner delete" on public.products
-  for delete to authenticated
-  using (exists (select 1 from public.stores s where s.id = products.store_id and s.owner_user_id = (select auth.uid())));
-
 create policy "payment methods store owner select" on public.payment_methods
   for select to authenticated
   using (exists (select 1 from public.stores s where s.id = payment_methods.store_id and s.owner_user_id = (select auth.uid())));
@@ -334,10 +369,6 @@ create policy "payment methods store owner update" on public.payment_methods
   for update to authenticated
   using (exists (select 1 from public.stores s where s.id = payment_methods.store_id and s.owner_user_id = (select auth.uid())))
   with check (exists (select 1 from public.stores s where s.id = payment_methods.store_id and s.owner_user_id = (select auth.uid())));
-
-create policy "payment methods store owner delete" on public.payment_methods
-  for delete to authenticated
-  using (exists (select 1 from public.stores s where s.id = payment_methods.store_id and s.owner_user_id = (select auth.uid())));
 
 create policy "transactions store owner select" on public.transactions
   for select to authenticated
@@ -352,10 +383,6 @@ create policy "transactions store owner update" on public.transactions
   using (exists (select 1 from public.stores s where s.id = transactions.store_id and s.owner_user_id = (select auth.uid())))
   with check (exists (select 1 from public.stores s where s.id = transactions.store_id and s.owner_user_id = (select auth.uid())));
 
-create policy "transactions store owner delete" on public.transactions
-  for delete to authenticated
-  using (exists (select 1 from public.stores s where s.id = transactions.store_id and s.owner_user_id = (select auth.uid())));
-
 create policy "transaction items store owner select" on public.transaction_items
   for select to authenticated
   using (exists (select 1 from public.stores s where s.id = transaction_items.store_id and s.owner_user_id = (select auth.uid())));
@@ -368,10 +395,6 @@ create policy "transaction items store owner update" on public.transaction_items
   for update to authenticated
   using (exists (select 1 from public.stores s where s.id = transaction_items.store_id and s.owner_user_id = (select auth.uid())))
   with check (exists (select 1 from public.stores s where s.id = transaction_items.store_id and s.owner_user_id = (select auth.uid())));
-
-create policy "transaction items store owner delete" on public.transaction_items
-  for delete to authenticated
-  using (exists (select 1 from public.stores s where s.id = transaction_items.store_id and s.owner_user_id = (select auth.uid())));
 
 create policy "expense categories store owner select" on public.expense_categories
   for select to authenticated
@@ -386,10 +409,6 @@ create policy "expense categories store owner update" on public.expense_categori
   using (exists (select 1 from public.stores s where s.id = expense_categories.store_id and s.owner_user_id = (select auth.uid())))
   with check (exists (select 1 from public.stores s where s.id = expense_categories.store_id and s.owner_user_id = (select auth.uid())));
 
-create policy "expense categories store owner delete" on public.expense_categories
-  for delete to authenticated
-  using (exists (select 1 from public.stores s where s.id = expense_categories.store_id and s.owner_user_id = (select auth.uid())));
-
 create policy "expenses store owner select" on public.expenses
   for select to authenticated
   using (exists (select 1 from public.stores s where s.id = expenses.store_id and s.owner_user_id = (select auth.uid())));
@@ -402,7 +421,3 @@ create policy "expenses store owner update" on public.expenses
   for update to authenticated
   using (exists (select 1 from public.stores s where s.id = expenses.store_id and s.owner_user_id = (select auth.uid())))
   with check (exists (select 1 from public.stores s where s.id = expenses.store_id and s.owner_user_id = (select auth.uid())));
-
-create policy "expenses store owner delete" on public.expenses
-  for delete to authenticated
-  using (exists (select 1 from public.stores s where s.id = expenses.store_id and s.owner_user_id = (select auth.uid())));
