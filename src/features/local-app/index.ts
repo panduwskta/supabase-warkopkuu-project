@@ -57,7 +57,16 @@ export interface OrderView {
   timestamp: number;
   items: OrderViewItem[];
   total: number;
+  paymentMethodSnapshot?: string;
+  paymentMethodKind?: LocalPaymentMethod['kind'];
   syncStatus?: string;
+}
+
+export interface PaymentMethodView {
+  id: string;
+  name: string;
+  kind: LocalPaymentMethod['kind'];
+  isDefault: boolean;
 }
 
 export interface ExpenseView {
@@ -103,6 +112,8 @@ function toOrderView(transaction: LocalTransaction, items: LocalTransactionItem[
     id: transaction.localId,
     timestamp: transactionTimestamp(transaction),
     total: transaction.total,
+    paymentMethodSnapshot: transaction.paymentMethodSnapshot,
+    paymentMethodKind: transaction.paymentMethodKind,
     syncStatus: transaction.syncStatus,
     items: items.map((item) => ({
       id: item.productLocalId,
@@ -363,7 +374,7 @@ export async function completeLocalV2Onboarding(storeId: string, options: { seed
 }
 
 export async function loadLocalV2AppData(storeId: string) {
-  const [rawStore, onboardingState, categories, products, transactions, transactionItems, expenses, expenseCategories, syncQueue] = await Promise.all([
+  const [rawStore, onboardingState, categories, products, transactions, transactionItems, expenses, expenseCategories, paymentMethods, syncQueue] = await Promise.all([
     warunginDb.stores.get(storeId),
     warunginDb.onboardingState.where({ storeId }).first(),
     listCategories(storeId),
@@ -372,6 +383,7 @@ export async function loadLocalV2AppData(storeId: string) {
     warunginDb.transactionItems.where({ storeId }).toArray(),
     warunginDb.expenses.where({ storeId }).toArray(),
     warunginDb.expenseCategories.where({ storeId }).toArray(),
+    warunginDb.paymentMethods.where({ storeId }).toArray(),
     warunginDb.syncQueue.where({ storeId }).toArray(),
   ]);
 
@@ -388,6 +400,18 @@ export async function loadLocalV2AppData(storeId: string) {
       .map((transaction) => toOrderView(transaction, transactionItems.filter((item) => item.transactionLocalId === transaction.localId)))
       .sort((a, b) => b.timestamp - a.timestamp),
     expenses: activeExpenses.map((expense) => toExpenseView(expense, activeExpenseCategories)).sort((a, b) => b.timestamp - a.timestamp),
+    paymentMethods: paymentMethods
+      .filter((method) => !method.isDeleted && !method.deletedAt && method.isActive)
+      .sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || a.name.localeCompare(b.name))
+      .map(
+        (method) =>
+          ({
+            id: method.localId,
+            name: method.name,
+            kind: method.kind,
+            isDefault: method.isDefault,
+          }) satisfies PaymentMethodView
+      ),
     syncSummary: {
       pending: syncQueue.filter((item) => item.status === 'pending').length,
       syncing: syncQueue.filter((item) => item.status === 'syncing').length,
@@ -453,14 +477,27 @@ export async function deleteMenuProduct(localId: string) {
   return product;
 }
 
-export async function checkoutCartLocal(store: LocalStore, cart: Array<{ id: string; qty: number }>, paymentAmount: number) {
+export async function checkoutCartLocal(
+  store: LocalStore,
+  cart: Array<{ id: string; qty: number }>,
+  paymentAmount: number,
+  paymentMethodLocalId?: string
+) {
   const cartItems: CartItem[] = cart.map((item) => ({ productLocalId: item.id, quantity: item.qty }));
+  const selectedPaymentMethod = paymentMethodLocalId ? await warunginDb.paymentMethods.get(paymentMethodLocalId) : undefined;
+  const fallbackPaymentMethod = selectedPaymentMethod
+    ? undefined
+    : await warunginDb.paymentMethods.where({ storeId: store.localId }).filter((method) => !method.isDeleted && method.isDefault).first();
+  const paymentMethod = selectedPaymentMethod ?? fallbackPaymentMethod;
+
   return checkoutLocal({
     storeId: store.localId,
     cartItems,
     paymentAmount,
-    paymentMethodSnapshot: 'Tunai',
-    paymentMethodKind: 'cash',
+    paymentMethodLocalId: paymentMethod?.localId,
+    paymentMethodRemoteId: paymentMethod?.remoteId,
+    paymentMethodSnapshot: paymentMethod?.name ?? 'Tunai',
+    paymentMethodKind: paymentMethod?.kind ?? 'cash',
     receiptPrefix: store.receiptPrefix || 'WRG',
   });
 }

@@ -64,6 +64,7 @@ const periodLabel = (period) => PERIODS.find(([id]) => id === period)?.[1] || 'S
 const receiptNo = (order) => order.items?.[0]?._receipt_no || `WRG-${String(order.id || order.timestamp).slice(0, 8).toUpperCase()}`;
 const paidAmount = (order) => Number(order.items?.[0]?._paid_amount || 0);
 const changeAmount = (order) => Number(order.items?.[0]?._change_amount || 0);
+const paymentMethodLabel = (order) => order.paymentMethodSnapshot || 'Tunai';
 const receiptText = (order) => {
   const lines = [
     'Struk Warungin',
@@ -73,6 +74,7 @@ const receiptText = (order) => {
     ...order.items.map((i) => `${i.qty}x ${i.name} — ${formatRp(i.price * i.qty)}`),
     '',
     `Total: ${formatRp(order.total)}`,
+    `Metode: ${paymentMethodLabel(order)}`,
   ];
   if (paidAmount(order)) lines.push(`Dibayar: ${formatRp(paidAmount(order))}`, `Kembalian: ${formatRp(changeAmount(order))}`);
   lines.push('', 'Terima kasih 🙏');
@@ -364,6 +366,7 @@ function useStore(user) {
   const [menu, setMenu] = useState([]);
   const [orders, setOrders] = useState([]);
   const [expenses, setExpenses] = useState([]);
+  const [paymentMethods, setPaymentMethods] = useState([]);
   const [localStore, setLocalStore] = useState(null);
   const [syncSummary, setSyncSummary] = useState({ pending: 0, syncing: 0, failed: 0, conflict: 0 });
   const [onboardingCompleted, setOnboardingCompleted] = useState(true);
@@ -379,6 +382,7 @@ function useStore(user) {
     setMenu(data.menu);
     setOrders(data.orders);
     setExpenses(data.expenses);
+    setPaymentMethods(data.paymentMethods || []);
     setSyncSummary(data.syncSummary);
     setOnboardingCompleted(Boolean(data.store?.onboardingCompleted));
     setLoading(false);
@@ -406,9 +410,9 @@ function useStore(user) {
     await refresh();
   };
 
-  const checkoutCart = async (cart, paymentAmount) => {
+  const checkoutCart = async (cart, paymentAmount, paymentMethodLocalId) => {
     if (!localStore) throw new Error('Local store belum siap.');
-    await checkoutCartLocal(localStore, cart, paymentAmount);
+    await checkoutCartLocal(localStore, cart, paymentAmount, paymentMethodLocalId);
     await refresh();
   };
 
@@ -441,7 +445,7 @@ function useStore(user) {
     await refresh();
   };
 
-  return { menu, orders, expenses, loading, localStore, onboardingCompleted, syncSummary, syncing, syncNow, completeOnboarding, addMenu, updateMenu, deleteMenu, checkoutCart, addExpense, deleteExpense, refresh };
+  return { menu, orders, expenses, paymentMethods, loading, localStore, onboardingCompleted, syncSummary, syncing, syncNow, completeOnboarding, addMenu, updateMenu, deleteMenu, checkoutCart, addExpense, deleteExpense, refresh };
 }
 
 function AuthScreen({ auth }) {
@@ -599,7 +603,7 @@ function App() {
     if (!validateStock()) return;
     setCheckoutOpen(true);
   };
-  const processCheckout = async (paid) => {
+  const processCheckout = async ({ paid, paymentMethodId }) => {
     if (!cart.length) return;
     if (!validateStock()) return;
     const paidNumber = Number(paid || 0);
@@ -608,7 +612,7 @@ function App() {
       return;
     }
     try {
-      await store.checkoutCart(cart, paidNumber);
+      await store.checkoutCart(cart, paidNumber, paymentMethodId);
       setCart([]);
       setCheckoutOpen(false);
       show('Pesanan tersimpan di perangkat & menunggu sync cloud.');
@@ -693,7 +697,7 @@ function App() {
     }
   };
   const exportCsv = (ordersToExport = store.orders) => {
-    const rows = [['waktu', 'items', 'total'], ...ordersToExport.map((o) => [formatDate(o.timestamp), o.items.map((i) => `${i.qty}x ${i.name}`).join('; '), o.total])];
+    const rows = [['waktu', 'items', 'metode', 'total'], ...ordersToExport.map((o) => [formatDate(o.timestamp), o.items.map((i) => `${i.qty}x ${i.name}`).join('; '), paymentMethodLabel(o), o.total])];
     const csv = '\uFEFF' + rows.map((r) => r.map((v) => `"${String(v).replaceAll('"', '""')}"`).join(',')).join('\n');
     downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `transaksi-warungin-${new Date().toISOString().slice(0, 10)}.csv`);
   };
@@ -727,7 +731,7 @@ function App() {
           {active === 'desktop' && <DesktopDashboard report={report} period={reportPeriod} setPeriod={setReportPeriod} storeName={currentStoreName} userEmail={auth.user.email} />}
         </>}
         <div className="main-credit"><Credit /></div>
-        {checkoutOpen && <CheckoutModal total={cartTotal} onClose={() => setCheckoutOpen(false)} onPay={processCheckout} />}
+        {checkoutOpen && <CheckoutModal total={cartTotal} paymentMethods={store.paymentMethods} onClose={() => setCheckoutOpen(false)} onPay={processCheckout} />}
         {edit && <div className="modal" onClick={() => setEdit(null)}><form className="modal-card form" onSubmit={saveEdit} onClick={(e) => e.stopPropagation()}><h3>Edit Menu</h3><label>Nama<input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /></label><label>Harga<input type="number" value={edit.price} onChange={(e) => setEdit({ ...edit, price: e.target.value })} /></label><label>HPP / Modal<input type="number" min="0" value={edit.hpp ?? ''} onChange={(e) => setEdit({ ...edit, hpp: e.target.value })} /></label><label>Kategori<select value={edit.category} onChange={(e) => setEdit({ ...edit, category: e.target.value })}>{['Minuman', 'Makanan', 'Cemilan', 'Paket'].map((x) => <option key={x}>{x}</option>)}</select></label><label>Stok<input type="number" value={edit.stock ?? ''} onChange={(e) => setEdit({ ...edit, stock: e.target.value })} /></label><button className="primary">Simpan Perubahan</button></form></div>}
       </main>
       <MobileBottomNav active={active} setActive={setActive} />
@@ -735,10 +739,19 @@ function App() {
   );
 }
 
-function CheckoutModal({ total, onClose, onPay }) {
+function CheckoutModal({ total, paymentMethods, onClose, onPay }) {
+  const methods = paymentMethods?.length
+    ? paymentMethods
+    : [{ id: 'cash-fallback', name: 'Tunai', kind: 'cash', isDefault: true }];
+  const defaultMethod = methods.find((method) => method.isDefault) || methods[0];
+  const [paymentMethodId, setPaymentMethodId] = useState(defaultMethod?.id);
+  const selectedMethod = methods.find((method) => method.id === paymentMethodId) || defaultMethod;
+  const isCash = selectedMethod?.kind === 'cash';
   const [paid, setPaid] = useState(total);
-  const change = Math.max(0, Number(paid || 0) - total);
-  return <div className="modal" onClick={onClose}><div className="modal-card checkout-sheet" onClick={(e) => e.stopPropagation()}><div className="modal-head"><h3>Pembayaran</h3><button onClick={onClose}><X /></button></div><div className="pay-summary"><span>Total Belanja</span><b>{formatRp(total)}</b></div><label className="pay-input">Uang diterima<input type="number" min={0} value={paid} onChange={(e) => setPaid(e.target.value)} autoFocus /></label><div className="pay-actions"><button type="button" onClick={() => setPaid(total)}>Bayar Pas</button><button type="button" onClick={() => setPaid(Math.ceil(total / 5000) * 5000)}>Bulat 5rb</button></div><div className="change-box"><span>Kembalian</span><b>{formatRp(change)}</b></div><button className="primary" disabled={Number(paid || 0) < total} onClick={() => onPay(paid)}><CheckCircle2 /> Konfirmasi Pembayaran</button></div></div>;
+  const effectivePaid = isCash ? Number(paid || 0) : total;
+  const change = Math.max(0, effectivePaid - total);
+
+  return <div className="modal" onClick={onClose}><div className="modal-card checkout-sheet" onClick={(e) => e.stopPropagation()}><div className="modal-head"><h3>Pembayaran</h3><button onClick={onClose}><X /></button></div><div className="pay-summary"><span>Total Belanja</span><b>{formatRp(total)}</b></div><div className="payment-methods"><span>Metode pembayaran</span><div>{methods.map((method) => <button key={method.id} type="button" className={paymentMethodId === method.id ? 'active' : ''} onClick={() => setPaymentMethodId(method.id)}>{method.name}</button>)}</div></div>{isCash ? <><label className="pay-input">Uang diterima<input type="number" min={0} value={paid} onChange={(e) => setPaid(e.target.value)} autoFocus /></label><div className="pay-actions"><button type="button" onClick={() => setPaid(total)}>Bayar Pas</button><button type="button" onClick={() => setPaid(Math.ceil(total / 5000) * 5000)}>Bulat 5rb</button></div><div className="change-box"><span>Kembalian</span><b>{formatRp(change)}</b></div></> : <div className="change-box"><span>Dibayar via {selectedMethod?.name}</span><b>{formatRp(total)}</b></div>}<button className="primary" disabled={effectivePaid < total} onClick={() => onPay({ paid: effectivePaid, paymentMethodId })}><CheckCircle2 /> Konfirmasi Pembayaran</button></div></div>;
 }
 function MobileTopBar({ activeLabel, user }) { return <div className="mobile-top"><div className="brand-mini"><div className="brand-icon"><Coffee /></div><div><b>Warungin</b><small>{activeLabel}</small></div></div><div className="avatar-mini"><UserCircle2 /><span>{user?.email?.slice(0, 1)?.toUpperCase()}</span></div></div>; }
 function MobileBottomNav({ active, setActive }) { return <div className="bottom-nav">{NAV_ITEMS.map(([id, label, Icon]) => <button key={id} onClick={() => setActive(id)} className={active === id ? 'active' : ''}><Icon /><span>{label}</span></button>)}</div>; }
@@ -778,10 +791,10 @@ function Pesanan({ orders, exportCsv, onShareOrder }) {
   const [period, setPeriod] = useState('all');
   const minTime = period === 'today' ? todayStart() : period === 'week' ? weekStart() : period === 'month' ? monthStart() : 0;
   const filtered = orders.filter((o) => o.timestamp >= minTime);
-  return <Card title="Riwayat Transaksi" action={<button onClick={() => exportCsv(filtered)}><Download /> CSV</button>}><div className="period-chips">{[['all', 'Semua'], ['today', 'Hari ini'], ['week', 'Minggu ini'], ['month', 'Bulan ini']].map(([id, label]) => <button key={id} className={period === id ? 'active' : ''} onClick={() => setPeriod(id)}>{label}</button>)}</div>{filtered.length ? <><div className="mobile-card-list">{filtered.map((o) => <React.Fragment key={o.id}><OrderCard order={o} onShareOrder={onShareOrder} /></React.Fragment>)}</div><table className="desktop-table"><thead><tr><th>No</th><th>Waktu</th><th>Detail Pesanan</th><th className="right">Total</th><th>Aksi</th></tr></thead><tbody>{filtered.map((o) => <tr key={o.id}><td><b>{receiptNo(o)}</b></td><td>{formatDate(o.timestamp)}</td><td>{o.items.map((i, idx) => <span className="chip" key={idx}>{i.qty}x {i.name}</span>)}</td><td className="right"><b>{formatRp(o.total)}</b></td><td><button className="share-link" type="button" onClick={() => onShareOrder(o)}>Share PNG</button></td></tr>)}</tbody></table></> : <Empty text="Belum ada transaksi pada periode ini." />}</Card>;
+  return <Card title="Riwayat Transaksi" action={<button onClick={() => exportCsv(filtered)}><Download /> CSV</button>}><div className="period-chips">{[['all', 'Semua'], ['today', 'Hari ini'], ['week', 'Minggu ini'], ['month', 'Bulan ini']].map(([id, label]) => <button key={id} className={period === id ? 'active' : ''} onClick={() => setPeriod(id)}>{label}</button>)}</div>{filtered.length ? <><div className="mobile-card-list">{filtered.map((o) => <React.Fragment key={o.id}><OrderCard order={o} onShareOrder={onShareOrder} /></React.Fragment>)}</div><table className="desktop-table"><thead><tr><th>No</th><th>Waktu</th><th>Detail Pesanan</th><th>Metode</th><th className="right">Total</th><th>Aksi</th></tr></thead><tbody>{filtered.map((o) => <tr key={o.id}><td><b>{receiptNo(o)}</b></td><td>{formatDate(o.timestamp)}</td><td>{o.items.map((i, idx) => <span className="chip" key={idx}>{i.qty}x {i.name}</span>)}</td><td><span className="badge">{paymentMethodLabel(o)}</span></td><td className="right"><b>{formatRp(o.total)}</b></td><td><button className="share-link" type="button" onClick={() => onShareOrder(o)}>Share PNG</button></td></tr>)}</tbody></table></> : <Empty text="Belum ada transaksi pada periode ini." />}</Card>;
 }
 function Pengeluaran({ expenses, expense, setExpense, addExpense, del }) { return <section className="space"><Card title="Catat Pengeluaran"><form onSubmit={addExpense} className="grid-form"><label>Nama Pengeluaran<input value={expense.name} onChange={(e) => setExpense({ ...expense, name: e.target.value })} placeholder="Belanja kopi / gula" /></label><label>Nominal<input type="number" value={expense.amount} onChange={(e) => setExpense({ ...expense, amount: e.target.value })} /></label><label>Kategori<select value={expense.category} onChange={(e) => setExpense({ ...expense, category: e.target.value })}>{['Belanja Bahan', 'Operasional', 'Gaji', 'Sewa', 'Lainnya'].map((x) => <option key={x}>{x}</option>)}</select></label><button className="dark">Simpan</button></form></Card><Card title="Riwayat Pengeluaran">{expenses.length ? <div className="mobile-card-list always">{expenses.map((e) => <div className="order-card" key={e.id}><div><b>{e.name}</b><small>{formatDate(e.timestamp)}</small><span className="badge">{e.category}</span></div><div className="order-total"><b>{formatRp(e.amount)}</b><button className="danger" onClick={() => del(e.id)}><Trash2 /></button></div></div>)}</div> : <Empty text="Belum ada pengeluaran." />}</Card></section>; }
-function OrderCard({ order, onShareOrder }) { return <div className="order-card"><div><b>{receiptNo(order)}</b><small>{formatDate(order.timestamp)}</small><small>{order.items.map((i) => `${i.qty}x ${i.name}`).join(', ')}</small>{paidAmount(order) ? <small>Dibayar {formatRp(paidAmount(order))} · Kembali {formatRp(changeAmount(order))}</small> : null}</div><div className="order-total"><b>{formatRp(order.total)}</b><button className="share-link" type="button" onClick={() => onShareOrder(order)}>Share PNG</button></div></div>; }
+function OrderCard({ order, onShareOrder }) { return <div className="order-card"><div><b>{receiptNo(order)}</b><small>{formatDate(order.timestamp)}</small><small>{order.items.map((i) => `${i.qty}x ${i.name}`).join(', ')}</small><small>Metode: {paymentMethodLabel(order)}</small>{paidAmount(order) ? <small>Dibayar {formatRp(paidAmount(order))} · Kembali {formatRp(changeAmount(order))}</small> : null}</div><div className="order-total"><b>{formatRp(order.total)}</b><button className="share-link" type="button" onClick={() => onShareOrder(order)}>Share PNG</button></div></div>; }
 function Card({ title, children, action = null }) { return <div className="card"><div className="card-head"><h3>{title}</h3>{action}</div>{children}</div>; }
 function Empty({ text, action = null, onClick = undefined }) { return <div className="empty"><Coffee /><p>{text}</p>{action && <button onClick={onClick}>{action}</button>}</div>; }
 export default App;

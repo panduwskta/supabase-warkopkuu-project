@@ -96,6 +96,7 @@ export interface LocalTransaction extends SyncableEntity {
   paymentMethodLocalId?: string;
   paymentMethodRemoteId?: string;
   paymentMethodSnapshot?: string;
+  paymentMethodKind?: PaymentMethodKind;
   paymentAmount: number;
   changeAmount: number;
   profitEstimate: number;
